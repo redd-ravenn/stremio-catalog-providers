@@ -1,0 +1,8 @@
+
+/node_modules
+cache.db
+.env
+catalog.db
+providers.db
+/log
+genres.db
