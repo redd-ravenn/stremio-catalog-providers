@@ -42,12 +42,12 @@ To set up and run the project using a classic Node.js environment:
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/redd-ravenn/stremio-catalogs-providers.git
+    git clone https://github.com/redd-ravenn/stremio-catalog-providers.git
     ```
 
 2. Navigate into the project directory:
     ```bash
-    cd stremio-catalogs-providers
+    cd stremio-catalog-providers
     ```
 
 3. Install the required dependencies:
@@ -66,25 +66,25 @@ To build and run the project using Docker:
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/redd-ravenn/stremio-catalogs-providers.git
+    git clone https://github.com/redd-ravenn/stremio-catalog-providers.git
     ```
 
 2. Navigate into the project directory:
     ```bash
-    cd stremio-catalogs-providers
+    cd stremio-catalog-providers
     ```
 
 3. Build the Docker image:
     ```bash
-    docker build -t yourusername/stremio-catalogs-providers .
+    docker build -t yourusername/stremio-catalog-providers .
     ```
 
 4. Run the Docker container:
     ```bash
-    docker run -p 8080:7000 yourusername/stremio-catalogs-providers
+    docker run -p 8080:7000 yourusername/stremio-catalog-providers
     ```
 
 Make sure to replace `yourusername` with your Docker Hub username or preferred image name.
 
 ## Contributing
-Thank you for considering contributing to the Stremio Catalogs Providers project! This project is currently in its very early stages of development, and we welcome any and all contributions. Whether you want to [report an issue](https://github.com/redd-ravenn/stremio-catalogs-providers/issues), suggest a new feature, or submit a pull request, your involvement is greatly appreciated.
+Thank you for considering contributing to the Stremio Catalogs Providers project! This project is currently in its very early stages of development, and we welcome any and all contributions. Whether you want to [report an issue](https://github.com/redd-ravenn/stremio-catalog-providers/issues), suggest a new feature, or submit a pull request, your involvement is greatly appreciated.
