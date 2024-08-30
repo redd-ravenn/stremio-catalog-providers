@@ -3,7 +3,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const log = require('./utils/logger');
 
-const dbDir = path.join(__dirname, 'db');
+const dbDir = path.join(__dirname, '../db');
 
 if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });

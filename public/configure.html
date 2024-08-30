@@ -453,11 +453,14 @@
       <h2 class="description">Choose your streaming providers below.</h2>
       <div class="separator"></div>
       <h3 class="providers-title">Available providers</h3>
+      <div class="form-element">
+        <input type="text" id="searchProviders" placeholder="Search providers..." />
+      </div>
       <div id="providers" class="provider-container"></div>
       <div class="separator"></div>
       <form class="pure-form" id="mainForm">
         <div class="form-element">
-          <label for="tmdbApiKey"> TMDB API key ( <a href="https://www.themoviedb.org/settings/api" target="_blank" style="color: #007aff;">Get it here</a>) </label>
+          <label for="tmdbApiKey"> TMDB API key (<a href="https://www.themoviedb.org/settings/api" target="_blank" style="color: #007aff;">Get it here</a>) </label>
           <input type="text" id="tmdbApiKey" name="tmdbApiKey" />
         </div>
         <div class="form-element">
@@ -537,35 +540,28 @@
           const infoIcon = document.getElementById('infoIcon');
           const infoModal = document.getElementById('infoModal');
           const modalClose = document.getElementById('modalClose');
+          const selectedProvidersContainer = document.getElementById('selectedProviders');
           let selectedProviders = [];
           let providersMap = {};
-          const selectedProvidersContainer = document.getElementById('selectedProviders');
+          new Sortable(selectedProvidersContainer, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: (evt) => {
+              selectedProviders = Array.from(selectedProvidersContainer.querySelectorAll('.selected-provider')).map(div => div.getAttribute('data-id'));
+            }
+          });
           const renderSelectedProviders = () => {
             selectedProvidersContainer.innerHTML = selectedProviders.map(providerId => `
-				<div class="selected-provider" data-id="${providerId}">
-					<img src="https://image.tmdb.org/t/p/w500/${providersMap[providerId].logo_path}" alt="${providersMap[providerId].display_name}" title="${providersMap[providerId].display_name}" />
-					<button class="remove-button" data-id="${providerId}">&times;</button>
-					<!-- Croix de suppression -->
-				</div>`).join('');
-            Sortable.create(selectedProvidersContainer, {
-              animation: 150,
-              ghostClass: 'sortable-ghost',
-              onEnd: () => {
-                selectedProviders = Array.from(selectedProvidersContainer.querySelectorAll('.selected-provider')).map(div => div.getAttribute('data-id'));
-                updateLinkDisplay();
-              },
-              setData: (dataTransfer, dragEl) => {
-                const img = new Image();
-                img.src = '';
-                dataTransfer.setDragImage(img, 0, 0);
-              }
-            });
+              <div class="selected-provider" data-id="${providerId}">
+                <img src="https://image.tmdb.org/t/p/w500/${providersMap[providerId].logo_path}" alt="${providersMap[providerId].display_name}" title="${providersMap[providerId].display_name}" />
+                <button class="remove-button" data-id="${providerId}">&times;</button>
+              </div>`).join('');
             document.querySelectorAll('.remove-button').forEach(button => {
               button.addEventListener('click', (event) => {
                 const providerId = event.target.getAttribute('data-id');
                 selectedProviders = selectedProviders.filter(id => id !== providerId);
                 const providerElement = document.querySelector(`.provider[data-id="${providerId}"]`);
-                providerElement.style.display = 'block';
+                if (providerElement) providerElement.style.display = 'block';
                 renderSelectedProviders();
               });
             });
@@ -591,19 +587,18 @@
             const providers = await fetchProviders();
             providers.sort((a, b) => a.display_name.localeCompare(b.display_name));
             providersContainer.innerHTML = providers.map(provider => `
-				<div class="provider" data-id="${provider.id}">
-					<img src="https://image.tmdb.org/t/p/w500/${provider.logo_path}" alt="${provider.display_name}" title="${provider.display_name}" />
-				</div>`).join('');
+              <div class="provider" data-id="${provider.id}">
+                <img src="https://image.tmdb.org/t/p/w500/${provider.logo_path}" alt="${provider.display_name}" title="${provider.display_name}" />
+              </div>`).join('');
+
             document.querySelectorAll('.provider').forEach(provider => {
               provider.addEventListener('click', () => {
                 const providerId = provider.getAttribute('data-id');
                 if (selectedProviders.includes(providerId)) {
                   selectedProviders = selectedProviders.filter(id => id !== providerId);
-                  provider.classList.remove('selected');
                   provider.style.display = 'block';
                 } else {
                   selectedProviders.push(providerId);
-                  provider.classList.add('selected');
                   provider.style.display = 'none';
                 }
                 renderSelectedProviders();
@@ -645,7 +640,7 @@
           };
           copyButton.onclick = () => {
             if (!validateForm()) {
-              showPopup('Configuration incomplete: Please fill in TMDB API Key, Language, select an Age Range, and choose at least one provider.', 'error');
+              showPopup('Configuration incomplete: Please select a Language, an Age Range and choose at least one provider.', 'error');
               return;
             }
             const link = getHttpsLink();
@@ -658,7 +653,7 @@
           };
           installButton.onclick = () => {
             if (!validateForm()) {
-              showPopup('Configuration incomplete: Please fill in TMDB API Key, Language, select an Age Range, and choose at least one provider.', 'error');
+              showPopup('Configuration incomplete: Please select a Language, an Age Range and choose at least one provider.', 'error');
               return;
             }
             const link = getStremioLink();
@@ -669,6 +664,13 @@
             document.body.classList.toggle('dark-mode');
             const isDarkMode = document.body.classList.contains('dark-mode');
             document.getElementById('theme-toggle').textContent = isDarkMode ? '🌞' : '🌙';
+          });
+          document.getElementById('searchProviders').addEventListener('input', function(event) {
+          const searchTerm = event.target.value.toLowerCase();
+          document.querySelectorAll('#providers .provider').forEach(provider => {
+            const providerName = providersMap[provider.getAttribute('data-id')].display_name.toLowerCase();
+            provider.style.display = providerName.includes(searchTerm) ? 'flex' : 'none';
+          });
           });
         });
       </script>
