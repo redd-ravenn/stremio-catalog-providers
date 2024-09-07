@@ -22,15 +22,21 @@ const getCache = (key) => {
     });
 };
 
-const setCache = (key, value) => {
+const setCache = (key, value, page = 1, skip = 0, providerId = null, type = null, sortBy = null) => {
     const expiration = Date.now() + cacheDuration * 1000;
-    catalogDb.run("INSERT OR REPLACE INTO cache (key, value, expiration) VALUES (?, ?, ?)", [key, JSON.stringify(value), expiration], (err) => {
-        if (err) {
-            log.error(`Failed to set cache for key ${key}:`, err);
-        } else {
-            log.info(`Cache set for key ${key} with expiration in ${cacheDuration} seconds`);
+
+    catalogDb.run(`
+        INSERT OR REPLACE INTO cache (key, value, expiration, page, skip, provider_id, type, sortBy)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 
+        [key, JSON.stringify(value), expiration, page, skip, providerId, type, sortBy], 
+        (err) => {
+            if (err) {
+                log.error('Error setting cache:', err);
+            } else {
+                log.debug(`Cache set with page: ${page}, skip: ${skip}, providerId: ${providerId}, type: ${type}, sortBy: ${sortBy}`);
+            }
         }
-    });
+    );
 };
 
 const cleanUpCache = () => {

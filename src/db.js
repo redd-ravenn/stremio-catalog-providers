@@ -47,17 +47,21 @@ providersDb.serialize(() => {
         }
     });
 });
-
 catalogDb.serialize(() => {
     catalogDb.run(`CREATE TABLE IF NOT EXISTS cache (
         key TEXT PRIMARY KEY,
         value TEXT,
-        expiration INTEGER
+        expiration INTEGER,
+        page INTEGER DEFAULT 1,
+        skip INTEGER DEFAULT 0,
+        provider_id INTEGER,
+        type TEXT,
+        sortBy TEXT
     )`, (err) => {
         if (err) {
             log.error('Error creating cache table:', err);
         } else {
-            log.debug('Cache table created or already exists');
+            log.debug('Cache table created or already exists with type and sort_by columns');
         }
     });
 });

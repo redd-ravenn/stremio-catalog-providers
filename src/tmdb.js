@@ -1,6 +1,6 @@
 const axios = require('axios');
 const queue = require('./utils/queue');
-const { providersDb, genresDb } = require('./db');
+const { providersDb, genresDb, catalogDb } = require('./db');
 const { TMDB_BEARER_TOKEN, TMDB_LANGUAGE, TMDB_WATCH_REGION } = process.env;
 const { getCache, setCache } = require('./cache');
 const log = require('./utils/logger');
@@ -29,41 +29,112 @@ const makeRequest = (url, tmdbApiKey = null) => {
     });
 };
 
-const fetchData = async (endpoint, params = {}, tmdbApiKey = null) => {
+const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy) => {
+    try {
+        const cachedEntry = await new Promise((resolve, reject) => {
+            catalogDb.get(
+                "SELECT page, skip FROM cache WHERE provider_id = ? AND skip = ? AND type = ? AND sortBy = ? ORDER BY skip DESC LIMIT 1",
+                [providerId, skip, type, sortBy],
+                (err, row) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(row);
+                    }
+                }
+            );
+        });
+
+        if (cachedEntry) {
+            log.debug('Cached Entry:', cachedEntry);
+            log.debug('Determined Page from Cache:', cachedEntry.page);
+            return cachedEntry.page;
+        }
+
+        const lastEntry = await new Promise((resolve, reject) => {
+            catalogDb.get(
+                "SELECT page, skip FROM cache WHERE provider_id = ? AND type = ? AND sortBy = ? ORDER BY skip DESC LIMIT 1",
+                [providerId, type, sortBy],
+                (err, row) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(row);
+                    }
+                }
+            );
+        });
+
+        log.debug('Last Entry:', lastEntry);
+
+        if (lastEntry) {
+            log.debug('Current Skip:', skip, 'Last Skip:', lastEntry.skip);
+
+            if (skip > lastEntry.skip) {
+                log.debug('Determined Page:', lastEntry.page + 1);
+                return lastEntry.page + 1;
+            }
+        }
+
+        log.debug('Default Page:', 1);
+        return 1;
+    } catch (error) {
+        log.error('Error in determinePageFromSkip:', error);
+        return 1;
+    }
+};
+
+const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = null) => {
     if (tmdbApiKey) {
         params.api_key = tmdbApiKey;
     }
 
-    const queryParams = new URLSearchParams({
-        ...params,
+    const { skip, type, sort_by: sortBy, ...queryParams } = params;
+
+    const page = providerId ? await determinePageFromSkip(providerId, skip, catalogDb, type, sortBy) : 1;
+
+    const queryParamsWithPage = {
+        ...queryParams,
+        page,
         language: params.language || TMDB_LANGUAGE,
-    }).toString();
+    };
 
-    const url = `${TMDB_BASE_URL}${endpoint}?${queryParams}`;
+    if (sortBy) {
+        queryParamsWithPage.sort_by = sortBy;
+    }
 
-    const cachedData = await getCache(url);
+    const queryString = new URLSearchParams(queryParamsWithPage).toString();
+
+    const url = `${TMDB_BASE_URL}${endpoint}?${queryString}`;
+
+    log.debug('Request URL:', url);
+
+    const cachedData = await getCache(url, skip);
     if (cachedData) {
         return cachedData;
     }
 
     const data = await makeRequest(url, tmdbApiKey);
 
-    setCache(url, data);
-    log.debug(`Data stored in cache for URL: ${url}`);
+    setCache(url, data, page, skip, providerId, type, sortBy);
+    log.debug(`Data stored in cache for URL: ${url} with page: ${page}, skip: ${skip}, providerId: ${providerId}, type: ${type}, sortBy: ${sortBy}`);
 
     return data;
 };
 
-const discoverContent = async (type, watchProviders = [], page = 1, ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language = TMDB_LANGUAGE) => {
+const discoverContent = async (type, watchProviders = [], ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language = TMDB_LANGUAGE, skip = 0) => {
     const mediaType = type === 'series' ? 'tv' : 'movie';
     const endpoint = `/discover/${mediaType}`;
-    
+
+    const regions = TMDB_WATCH_REGION ? TMDB_WATCH_REGION.split(',') : [];
+    const providerId = watchProviders[0];
+
     const params = {
-        watch_region: TMDB_WATCH_REGION,
         with_watch_providers: watchProviders.join(','),
-        page,
         sort_by: sortBy,
         language,
+        skip,
+        type
     };
 
     if (ageRange) {
@@ -73,7 +144,6 @@ const discoverContent = async (type, watchProviders = [], page = 1, ageRange = n
                     params.certification_country = 'US';
                     params.certification = 'G';
                     params.without_genres = '27,18,53,80,10752,37,10749,10768,10767,10766,10764,10763,9648,99,36';
-                    // without_genres = Horror, Drama, Thriller, Crime, War, Western, Erotic, War & Politics, Talk, Soap, Reality, News, Mystery, Documentary, History
                 }
                 if (mediaType === 'tv') {
                     params.with_genres = '10762'; // Kids only
@@ -85,7 +155,6 @@ const discoverContent = async (type, watchProviders = [], page = 1, ageRange = n
                     params.certification_country = 'US';
                     params.certification = 'G';
                     params.without_genres = '27,18,53,80,10752,37,10749,10768,10767,10766,10764,10763,9648,99,36';
-                    // without_genres = same as case '0-5'
                 }
                 if (mediaType === 'tv') {
                     params.with_genres = '10762'; // Kids only
@@ -125,8 +194,21 @@ const discoverContent = async (type, watchProviders = [], page = 1, ageRange = n
         params.with_genres = genre;
     }
 
-    log.debug(`[discoverContent] Final params: ${JSON.stringify(params)}`);
-    return await fetchData(endpoint, params, tmdbApiKey);
+    const fetchForRegion = async (region) => {
+        params.watch_region = region;
+        return await fetchData(endpoint, params, tmdbApiKey, providerId);
+    };
+
+    const results = await Promise.all(regions.map(region => fetchForRegion(region)));
+
+    const combinedResults = results.reduce((acc, result) => acc.concat(result.results), []);
+
+    const uniqueResults = Array.from(new Map(combinedResults.map(item => [item.id, item])).values());
+
+    return {
+        ...results[0],
+        results: uniqueResults
+    };
 };
 
 const mergeProviders = (providers) => {
@@ -149,15 +231,21 @@ const mergeProviders = (providers) => {
 
 const updateProviders = async () => {
     try {
+        const regions = TMDB_WATCH_REGION ? TMDB_WATCH_REGION.split(',') : [];
         const movieEndpoint = `/watch/providers/movie`;
         const tvEndpoint = `/watch/providers/tv`;
 
-        const [movieData, tvData] = await Promise.all([
-            fetchData(movieEndpoint, { watch_region: TMDB_WATCH_REGION }),
-            fetchData(tvEndpoint, { watch_region: TMDB_WATCH_REGION })
-        ]);
+        const fetchProvidersForRegion = async (region) => {
+            const params = { watch_region: region };
+            const [movieData, tvData] = await Promise.all([
+                fetchData(movieEndpoint, params),
+                fetchData(tvEndpoint, params)
+            ]);
+            return [...movieData.results, ...tvData.results];
+        };
 
-        const combinedProviders = mergeProviders([...movieData.results, ...tvData.results]);
+        const results = await Promise.all(regions.map(region => fetchProvidersForRegion(region)));
+        const combinedProviders = mergeProviders(results.flat());
 
         const insertOrUpdateProvider = providersDb.prepare(`
             INSERT INTO providers (provider_id, provider_name, logo_path) 

@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const log = require('./utils/logger');
 const { requestLogger, errorHandler } = require('./utils/middleware');
-const { providersDb, genresDb } = require('./db');
+const { providersDb, genresDb, catalogDb } = require('./db');
 const { discoverContent, getGenres } = require('./tmdb');
 const { TMDB_LANGUAGE } = process.env;
 
@@ -10,63 +10,15 @@ const router = express.Router();
 
 router.use(requestLogger);
 
-router.post("/update-catalog", async (req, res) => {
-    const { type, catalog } = req.body;
-    log.info(`Received request to update catalog for type: ${type}, catalog: ${catalog}`);
-
-    if (!type || (type !== 'movie' && type !== 'series')) {
-        return res.status(400).json({ error: 'Invalid type. Must be "movie" or "series".' });
-    }
-
-    if (!catalog || (catalog !== 'popular' && catalog !== 'new')) {
-        return res.status(400).json({ error: 'Invalid catalog. Must be "popular" or "new".' });
-    }
-
-    const sortBy = catalog === 'new'
-        ? (type === 'movie' ? 'primary_release_date.desc' : 'first_air_date.desc')
-        : 'popularity.desc';
-
-    try {
-        const providers = await new Promise((resolve, reject) => {
-            providersDb.all('SELECT provider_id FROM providers', [], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows.map(row => row.provider_id));
-            });
-        });
-
-        if (providers.length === 0) {
-            return res.status(400).json({ error: 'No providers found.' });
-        }
-
-        log.info('Providers list retrieved successfully.');
-
-        for (const provider of providers) {
-            log.info(`Fetching content from provider: ${provider}`);
-            const discoverResults = await discoverContent(type, [provider], 1, null, sortBy);
-            log.info(`Results from provider ${provider} fetched successfully.`);
-
-            const filteredResults = discoverResults.results.filter(content => content.poster_path);
-
-            log.info(`Filtered results from provider ${provider} processed successfully.`);
-        }
-
-        log.info('Catalog update completed.');
-        res.json({ success: true });
-    } catch (error) {
-        log.error(`Error updating catalog: ${error.message}`, error);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
-
 router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res, next) => {
     const { id, configParameters, type, extra: extraParam } = req.params;
 
     const extra = extraParam ? decodeURIComponent(extraParam) : '';
-    let page = 1;
     let ageRange = null;
     let genre = null;
     let tmdbApiKey = null;
     let language = TMDB_LANGUAGE;
+    let skip = 0;
 
     log.debug(`Received parameters: id=${id}, type=${type}, configParameters=${configParameters}, extra=${extra}`);
 
@@ -84,10 +36,17 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
         log.warn('configParameters is missing');
     }
 
+    const match = id.match(/^tmdb-discover-(movies|series)(-new)?-(\d+)$/);
+    if (!match) {
+        return res.status(400).json({ error: 'Invalid catalog id' });
+    }
+    const catalogType = match[1];
+    const providerId = parseInt(match[3], 10);
+    const providers = [providerId.toString()];
+
     if (extra.startsWith('skip=')) {
         const skipValue = parseInt(extra.split('=')[1], 10);
-        page = Math.floor(skipValue / 20) + 1;
-        log.debug(`Skip parameter found, page set to: ${page}`);
+        skip = isNaN(skipValue) ? 0 : skipValue;
     }
 
     if (extra.includes('genre=')) {
@@ -113,23 +72,13 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
     }
 
     try {
-        const match = id.match(/^tmdb-discover-(movies|series)(-new)?-(\d+)$/);
-
-        if (!match) {
-            return res.status(400).json({ error: 'Invalid catalog id' });
-        }
-
-        const catalogType = match[1];
-        const providerId = parseInt(match[3], 10);
-        const providers = [providerId.toString()];
-
         const sortBy = catalogType === 'movies' 
             ? (id.includes('-new') ? 'primary_release_date.desc' : 'popularity.desc') 
             : (id.includes('-new') ? 'first_air_date.desc' : 'popularity.desc');
 
-        log.debug(`Calling discoverContent with parameters: type=${catalogType}, page=${page}, ageRange=${ageRange}, sortBy=${sortBy}, genre=${genre}, language=${language}`);
+        log.debug(`Calling discoverContent with parameters: type=${catalogType}, ageRange=${ageRange}, sortBy=${sortBy}, genre=${genre}, language=${language}, skip=${skip}`);
 
-        const discoverResults = await discoverContent(catalogType, providers, page, ageRange, sortBy, genre, tmdbApiKey, language);
+        const discoverResults = await discoverContent(catalogType, providers, ageRange, sortBy, genre, tmdbApiKey, language, skip, type);
 
         const filteredResults = discoverResults.results.filter(content => content.poster_path);
 
