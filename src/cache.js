@@ -39,6 +39,37 @@ const setCache = (key, value, page = 1, skip = 0, providerId = null, type = null
     );
 };
 
+const getCachedPoster = async (posterId) => {
+    return new Promise((resolve, reject) => {
+        catalogDb.get("SELECT * FROM rpdb_poster_cache WHERE id = ?", [posterId], (err, row) => {
+            if (err) {
+                log.error(`Error retrieving cached poster for id ${posterId}: ${err.message}`);
+                reject(err);
+            } else if (row) {
+                log.debug(`Cache hit for poster id ${posterId}. Poster URL: ${row.poster_url}`);
+                resolve(row);
+            } else {
+                log.debug(`Cache miss for poster id ${posterId}`);
+                resolve(null);
+            }
+        });
+    });
+};
+
+const setCachedPoster = async (posterId, posterUrl) => {
+    return new Promise((resolve, reject) => {
+        catalogDb.run(`INSERT OR REPLACE INTO rpdb_poster_cache (id, poster_url) VALUES (?, ?)`, [posterId, posterUrl], function (err) {
+            if (err) {
+                log.error(`Error caching poster id ${posterId}: ${err.message}`);
+                reject(err);
+            } else {
+                log.debug(`Poster id ${posterId} cached with URL: ${posterUrl}`);
+                resolve();
+            }
+        });
+    });
+};
+
 const cleanUpCache = () => {
     catalogDb.run("DELETE FROM cache WHERE expiration <= ?", [Date.now()], (err) => {
         if (err) {
@@ -55,4 +86,6 @@ module.exports = {
     getCache,
     setCache,
     cleanUpCache,
+    getCachedPoster,
+    setCachedPoster
 };

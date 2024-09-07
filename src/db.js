@@ -66,6 +66,19 @@ catalogDb.serialize(() => {
     });
 });
 
+catalogDb.serialize(() => {
+    catalogDb.run(`CREATE TABLE IF NOT EXISTS rpdb_poster_cache (
+        id TEXT PRIMARY KEY,
+        poster_url TEXT
+    )`, (err) => {
+        if (err) {
+            log.error('Error creating poster_cache table:', err);
+        } else {
+            log.debug('Poster cache table created or already exists');
+        }
+    });
+});
+
 genresDb.serialize(() => {
     genresDb.run(`CREATE TABLE IF NOT EXISTS genres (
         genre_id INTEGER PRIMARY KEY,

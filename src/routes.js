@@ -2,9 +2,11 @@ const express = require('express');
 const path = require('path');
 const log = require('./utils/logger');
 const { requestLogger, errorHandler } = require('./utils/middleware');
-const { providersDb, genresDb, catalogDb } = require('./db');
+const { providersDb, genresDb } = require('./db');
 const { discoverContent, getGenres } = require('./tmdb');
+const { getCachedPoster, setCachedPoster } = require('./cache');
 const { TMDB_LANGUAGE } = process.env;
+const axios = require('axios');
 
 const router = express.Router();
 
@@ -12,13 +14,14 @@ router.use(requestLogger);
 
 router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res, next) => {
     const { id, configParameters, type, extra: extraParam } = req.params;
-
     const extra = extraParam ? decodeURIComponent(extraParam) : '';
     let ageRange = null;
     let genre = null;
     let tmdbApiKey = null;
+    let rpdbApiKey = null;
     let language = TMDB_LANGUAGE;
     let skip = 0;
+    let rpdbApiKeyValid = false;
 
     log.debug(`Received parameters: id=${id}, type=${type}, configParameters=${configParameters}, extra=${extra}`);
 
@@ -27,8 +30,9 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
             const parsedConfig = JSON.parse(decodeURIComponent(configParameters));
             ageRange = parsedConfig.ageRange || null;
             tmdbApiKey = parsedConfig.tmdbApiKey || null;
+            rpdbApiKey = parsedConfig.rpdbApiKey || null;
             language = parsedConfig.language || TMDB_LANGUAGE;
-            log.debug(`Config parameters extracted: ageRange=${ageRange}, tmdbApiKey=${tmdbApiKey}, language=${language}`);
+            log.debug(`Config parameters extracted: ageRange=${ageRange}, tmdbApiKey=${tmdbApiKey}, rpdbApiKey=${rpdbApiKey}, language=${language}`);
         } catch (error) {
             log.error(`Error parsing configParameters: ${error.message}`);
         }
@@ -72,26 +76,119 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
     }
 
     try {
-        const sortBy = catalogType === 'movies' 
-            ? (id.includes('-new') ? 'primary_release_date.desc' : 'popularity.desc') 
+        const sortBy = catalogType === 'movies'
+            ? (id.includes('-new') ? 'primary_release_date.desc' : 'popularity.desc')
             : (id.includes('-new') ? 'first_air_date.desc' : 'popularity.desc');
 
         log.debug(`Calling discoverContent with parameters: type=${catalogType}, ageRange=${ageRange}, sortBy=${sortBy}, genre=${genre}, language=${language}, skip=${skip}`);
 
         const discoverResults = await discoverContent(catalogType, providers, ageRange, sortBy, genre, tmdbApiKey, language, skip, type);
 
+        const validateRpdbApiKey = async (apiKey) => {
+            if (!apiKey) {
+                log.warn('No RPDB API Key provided.');
+                return false;
+            }
+            try {
+                log.debug(`Validating RPDB API Key: ${apiKey}`);
+                const response = await axios.get(`https://api.ratingposterdb.com/${apiKey}/isValid`);
+                if (response.status === 200) {
+                    log.debug('RPDB API Key is valid.');
+                    return true;
+                } else {
+                    log.warn('RPDB API Key is invalid.');
+                    return false;
+                }
+            } catch (error) {
+                log.error(`Error validating RPDB API Key: ${error.message}`);
+                return false;
+            }
+        };
+
+        const checkRpdbApiKeyRequests = async (apiKey) => {
+            if (!apiKey) {
+                log.warn('No RPDB API Key provided.');
+                return false;
+            }
+            try {
+                log.debug(`Checking RPDB API Key request count with key: ${apiKey}`);
+                const response = await axios.get(`https://api.ratingposterdb.com/${apiKey}/requests`);
+                if (response.status === 200) {
+                    log.info(`RPDB API Key requests: ${response.data.req}, limit: ${response.data.limit}`);
+                    return response.data.req < response.data.limit;
+                } else {
+                    log.warn('Unable to retrieve RPDB API Key request count.');
+                    return false;
+                }
+            } catch (error) {
+                log.error(`Error checking RPDB API Key request count: ${error.message}`);
+                return false;
+            }
+        };
+
+        rpdbApiKeyValid = await validateRpdbApiKey(rpdbApiKey);
+
+        const getRpdbPoster = (type, id, language, rpdbkey) => {
+            const tier = rpdbkey.split("-")[0];
+            const lang = language.split("-")[0];
+            const baseUrl = `https://api.ratingposterdb.com/${rpdbkey}/tmdb/poster-default/${type}-${id}.jpg?fallback=true`;
+            return tier === "t1" || lang === "en"
+                ? baseUrl
+                : `${baseUrl}&lang=${lang}`;
+        };
+
+        const getPosterUrl = async (content, rpdbApiKey) => {
+            const posterId = `poster:${content.id}`;
+        
+            const cachedPoster = await getCachedPoster(posterId);
+            if (cachedPoster) {
+                log.debug(`Using cached poster URL for id ${posterId}`);
+                return cachedPoster.poster_url;
+            }
+        
+            let posterUrl;
+            if (rpdbApiKey) {
+                const isValid = await validateRpdbApiKey(rpdbApiKey);
+                if (!isValid) {
+                    posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
+                } else {
+                    const hasRequestsRemaining = await checkRpdbApiKeyRequests(rpdbApiKey);
+                    if (!hasRequestsRemaining) {
+                        log.warn('RPDB API Key request limit reached.');
+                        posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
+                    } else {
+                        const rpdbImage = getRpdbPoster(catalogType, content.id, language, rpdbApiKey);
+                        try {
+                            log.debug(`Fetching RPDB poster URL: ${rpdbImage}`);
+                            await axios.get(rpdbImage);
+                            posterUrl = rpdbImage;
+                        } catch (error) {
+                            log.warn('Error fetching RPDB poster, falling back to TMDB poster.');
+                            posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
+                        }
+                    }
+                }
+            } else {
+                posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
+            }
+        
+            await setCachedPoster(posterId, posterUrl);
+        
+            return posterUrl;
+        };
+
         const filteredResults = discoverResults.results.filter(content => content.poster_path);
 
-        const metas = filteredResults.map(content => ({
+        const metas = await Promise.all(filteredResults.map(async (content) => ({
             id: `tmdb:${content.id}`,
             type: catalogType === 'movies' ? 'movie' : 'series',
             name: catalogType === 'movies' ? content.title : content.name,
-            poster: `https://image.tmdb.org/t/p/w500${content.poster_path}`,
+            poster: await getPosterUrl(content, rpdbApiKey),
             background: `https://image.tmdb.org/t/p/w1280${content.backdrop_path}`,
             description: content.overview,
             year: catalogType === 'movies' ? content.release_date?.split('-')[0] : content.first_air_date?.split('-')[0],
             imdbRating: content.vote_average ? content.vote_average.toFixed(1) : null,
-        }));
+        })));
 
         return res.json({ metas });
     } catch (error) {
