@@ -1,8 +1,4 @@
-
-/node_modules
-cache.db
 .env
-catalog.db
-providers.db
+/node_modules
 /log
-genres.db
+/db

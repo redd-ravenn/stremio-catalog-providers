@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const log = require('./utils/logger');
 const { requestLogger, errorHandler } = require('./utils/middleware');
 const { providersDb, genresDb } = require('./db');
@@ -12,6 +13,19 @@ const router = express.Router();
 
 router.use(requestLogger);
 
+router.get('/poster/:filename', (req, res) => {
+    const filePath = path.join(__dirname, '../db/rpdbPosters', req.params.filename);
+    
+    fs.access(filePath, fs.constants.F_OK, (err) => {
+        if (err) {
+            log.error(`Poster not found: ${filePath}`);
+            res.status(404).send('Poster not found');
+        } else {
+            res.sendFile(filePath);
+        }
+    });
+});
+
 router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res, next) => {
     const { id, configParameters, type, extra: extraParam } = req.params;
     const extra = extraParam ? decodeURIComponent(extraParam) : '';
@@ -21,7 +35,6 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
     let rpdbApiKey = null;
     let language = TMDB_LANGUAGE;
     let skip = 0;
-    let rpdbApiKeyValid = false;
 
     log.debug(`Received parameters: id=${id}, type=${type}, configParameters=${configParameters}, extra=${extra}`);
 
@@ -84,50 +97,6 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
 
         const discoverResults = await discoverContent(catalogType, providers, ageRange, sortBy, genre, tmdbApiKey, language, skip, type);
 
-        const validateRpdbApiKey = async (apiKey) => {
-            if (!apiKey) {
-                log.warn('No RPDB API Key provided.');
-                return false;
-            }
-            try {
-                log.debug(`Validating RPDB API Key: ${apiKey}`);
-                const response = await axios.get(`https://api.ratingposterdb.com/${apiKey}/isValid`);
-                if (response.status === 200) {
-                    log.debug('RPDB API Key is valid.');
-                    return true;
-                } else {
-                    log.warn('RPDB API Key is invalid.');
-                    return false;
-                }
-            } catch (error) {
-                log.error(`Error validating RPDB API Key: ${error.message}`);
-                return false;
-            }
-        };
-
-        const checkRpdbApiKeyRequests = async (apiKey) => {
-            if (!apiKey) {
-                log.warn('No RPDB API Key provided.');
-                return false;
-            }
-            try {
-                log.debug(`Checking RPDB API Key request count with key: ${apiKey}`);
-                const response = await axios.get(`https://api.ratingposterdb.com/${apiKey}/requests`);
-                if (response.status === 200) {
-                    log.info(`RPDB API Key requests: ${response.data.req}, limit: ${response.data.limit}`);
-                    return response.data.req < response.data.limit;
-                } else {
-                    log.warn('Unable to retrieve RPDB API Key request count.');
-                    return false;
-                }
-            } catch (error) {
-                log.error(`Error checking RPDB API Key request count: ${error.message}`);
-                return false;
-            }
-        };
-
-        rpdbApiKeyValid = await validateRpdbApiKey(rpdbApiKey);
-
         const getRpdbPoster = (type, id, language, rpdbkey) => {
             const tier = rpdbkey.split("-")[0];
             const lang = language.split("-")[0];
@@ -139,40 +108,30 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
 
         const getPosterUrl = async (content, rpdbApiKey) => {
             const posterId = `poster:${content.id}`;
-        
-            const cachedPoster = await getCachedPoster(posterId);
-            if (cachedPoster) {
-                log.debug(`Using cached poster URL for id ${posterId}`);
-                return cachedPoster.poster_url;
+            
+            if (rpdbApiKey) {
+                const cachedPoster = await getCachedPoster(posterId);
+                if (cachedPoster) {
+                    log.debug(`Using cached poster URL for id ${posterId}`);
+                    return cachedPoster.poster_url;
+                }
             }
         
             let posterUrl;
+        
             if (rpdbApiKey) {
-                const isValid = await validateRpdbApiKey(rpdbApiKey);
-                if (!isValid) {
+                const rpdbImage = getRpdbPoster(catalogType, content.id, language, rpdbApiKey);
+                try {
+                    log.debug(`Fetching RPDB poster URL: ${rpdbImage}`);
+                    await axios.get(rpdbImage);
+                    posterUrl = rpdbImage;
+                } catch (error) {
+                    log.warn('Error fetching RPDB poster, falling back to TMDB poster.');
                     posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
-                } else {
-                    const hasRequestsRemaining = await checkRpdbApiKeyRequests(rpdbApiKey);
-                    if (!hasRequestsRemaining) {
-                        log.warn('RPDB API Key request limit reached.');
-                        posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
-                    } else {
-                        const rpdbImage = getRpdbPoster(catalogType, content.id, language, rpdbApiKey);
-                        try {
-                            log.debug(`Fetching RPDB poster URL: ${rpdbImage}`);
-                            await axios.get(rpdbImage);
-                            posterUrl = rpdbImage;
-                        } catch (error) {
-                            log.warn('Error fetching RPDB poster, falling back to TMDB poster.');
-                            posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
-                        }
-                    }
                 }
             } else {
                 posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
             }
-        
-            await setCachedPoster(posterId, posterUrl);
         
             return posterUrl;
         };
@@ -190,7 +149,16 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
             imdbRating: content.vote_average ? content.vote_average.toFixed(1) : null,
         })));
 
-        return res.json({ metas });
+        res.json({ metas });
+
+        filteredResults.forEach(async (content) => {
+            const posterId = `poster:${content.id}`;
+            const posterUrl = await getPosterUrl(content, rpdbApiKey);
+            if (rpdbApiKey && posterUrl !== `https://image.tmdb.org/t/p/w500${content.poster_path}`) {
+                setCachedPoster(posterId, posterUrl).catch(err => log.error(`Error caching poster: ${err.message}`));
+            }
+        });
+
     } catch (error) {
         log.error(`Error processing request: ${error.message}`);
         if (!res.headersSent) {

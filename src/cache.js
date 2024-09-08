@@ -1,8 +1,20 @@
 const { catalogDb } = require('./db');
 const log = require('./utils/logger');
-const { CACHE_DURATION_DAYS } = process.env;
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+const { CACHE_CATALOG_CONTENT_DURATION_DAYS, CACHE_POSTER_CONTENT_DURATION_DAYS } = process.env;
+const baseUrl = process.env.BASE_URL || 'http://localhost:7000';
 
-const cacheDuration = (CACHE_DURATION_DAYS ? parseInt(CACHE_DURATION_DAYS, 10) : 3) * 24 * 60 * 60;
+const defaultCacheDurationDays = 3;
+const cacheCatalogDurationDays = parseInt(CACHE_CATALOG_CONTENT_DURATION_DAYS, 10) || defaultCacheDurationDays;
+const cacheCatalogDurationMillis = cacheCatalogDurationDays * 24 * 60 * 60 * 1000;
+
+const posterCacheDurationDays = parseInt(CACHE_POSTER_CONTENT_DURATION_DAYS, 10) || defaultCacheDurationDays;
+const posterCacheDurationMillis = posterCacheDurationDays * 24 * 60 * 60 * 1000;
+
+log.debug(`Cache duration for catalog: ${cacheCatalogDurationMillis} milliseconds (${cacheCatalogDurationDays} days)`);
+log.debug(`Cache duration for posters: ${posterCacheDurationMillis} milliseconds (${posterCacheDurationDays} days)`);
 
 const getCache = (key) => {
     return new Promise((resolve, reject) => {
@@ -23,7 +35,8 @@ const getCache = (key) => {
 };
 
 const setCache = (key, value, page = 1, skip = 0, providerId = null, type = null, sortBy = null, ageRange = null) => {
-    const expiration = Date.now() + cacheDuration * 1000;
+    const expiration = Date.now() + cacheCatalogDurationMillis;
+    log.debug(`Setting cache with expiration: ${new Date(expiration).toUTCString()}`);
 
     catalogDb.run(`
         INSERT OR REPLACE INTO cache (key, value, expiration, page, skip, provider_id, type, sortBy, ageRange)
@@ -39,35 +52,43 @@ const setCache = (key, value, page = 1, skip = 0, providerId = null, type = null
     );
 };
 
+const posterDirectory = path.join(__dirname, '../db/rpdbPosters');
+
+if (!fs.existsSync(posterDirectory)) {
+    fs.mkdirSync(posterDirectory, { recursive: true });
+}
+
+const formatFileName = (posterId) => {
+    return posterId.replace(/[^a-zA-Z0-9-_]/g, '_');
+};
+
 const getCachedPoster = async (posterId) => {
-    return new Promise((resolve, reject) => {
-        catalogDb.get("SELECT * FROM rpdb_poster_cache WHERE id = ?", [posterId], (err, row) => {
-            if (err) {
-                log.error(`Error retrieving cached poster for id ${posterId}: ${err.message}`);
-                reject(err);
-            } else if (row) {
-                log.debug(`Cache hit for poster id ${posterId}. Poster URL: ${row.poster_url}`);
-                resolve(row);
-            } else {
-                log.debug(`Cache miss for poster id ${posterId}`);
-                resolve(null);
-            }
-        });
-    });
+    const formattedPosterId = formatFileName(posterId);
+    const filePath = path.join(posterDirectory, `${formattedPosterId}.jpg`);
+    const fileStats = fs.existsSync(filePath) ? fs.statSync(filePath) : null;
+
+    if (fileStats && (Date.now() - fileStats.mtimeMs < posterCacheDurationMillis)) {
+        const posterUrl = `${baseUrl}/poster/${formattedPosterId}.jpg`;
+        log.debug(`Cache hit for poster id ${posterId}, serving from ${posterUrl}`);
+        return { poster_url: posterUrl };
+    } else {
+        log.debug(`Cache miss or expired for poster id ${posterId}`);
+        return null;
+    }
 };
 
 const setCachedPoster = async (posterId, posterUrl) => {
-    return new Promise((resolve, reject) => {
-        catalogDb.run(`INSERT OR REPLACE INTO rpdb_poster_cache (id, poster_url) VALUES (?, ?)`, [posterId, posterUrl], function (err) {
-            if (err) {
-                log.error(`Error caching poster id ${posterId}: ${err.message}`);
-                reject(err);
-            } else {
-                log.debug(`Poster id ${posterId} cached with URL: ${posterUrl}`);
-                resolve();
-            }
-        });
-    });
+    const formattedPosterId = formatFileName(posterId);
+    const filePath = path.join(posterDirectory, `${formattedPosterId}.jpg`);
+
+    try {
+        const response = await axios.get(posterUrl, { responseType: 'arraybuffer' });
+        fs.writeFileSync(filePath, response.data);
+        log.debug(`Poster id ${posterId} cached at ${filePath}`);
+    } catch (error) {
+        log.error(`Error caching poster id ${posterId} from URL ${posterUrl}: ${error.message}`);
+        throw error;
+    }
 };
 
 const cleanUpCache = () => {
