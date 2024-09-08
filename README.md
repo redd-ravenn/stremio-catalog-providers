@@ -15,7 +15,16 @@ services:
       # Port to listen on inside the container
       PORT: 7000
 
-      # Authentication token for TMDB (define this value with your token, not api key, if you want to enabled public instance, can be blank but user must define own api key)
+      # URL to access the addon
+      BASE_URL: http://localhost:7000
+
+      # Cache duration for catalog content in days
+      CACHE_CATALOG_CONTENT_DURATION_DAYS: 3
+
+      # Cache duration for RPDB poster content in days
+      CACHE_POSTER_CONTENT_DURATION_DAYS: 7
+
+      # Authentication token for TMDB (define this value with your token, not api key, if you want to enable public instance, can be blank but user must define own api key)
       TMDB_BEARER_TOKEN:
 
       # Language for TMDB data
