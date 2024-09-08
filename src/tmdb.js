@@ -29,12 +29,12 @@ const makeRequest = (url, tmdbApiKey = null) => {
     });
 };
 
-const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy) => {
+const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, ageRange) => {
     try {
         const cachedEntry = await new Promise((resolve, reject) => {
             catalogDb.get(
-                "SELECT page, skip FROM cache WHERE provider_id = ? AND skip = ? AND type = ? AND sortBy = ? ORDER BY skip DESC LIMIT 1",
-                [providerId, skip, type, sortBy],
+                "SELECT page, skip FROM cache WHERE provider_id = ? AND skip = ? AND type = ? AND sortBy = ? AND ageRange = ? ORDER BY skip DESC LIMIT 1",
+                [providerId, skip, type, sortBy, ageRange],
                 (err, row) => {
                     if (err) {
                         reject(err);
@@ -53,8 +53,8 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy) 
 
         const lastEntry = await new Promise((resolve, reject) => {
             catalogDb.get(
-                "SELECT page, skip FROM cache WHERE provider_id = ? AND type = ? AND sortBy = ? ORDER BY skip DESC LIMIT 1",
-                [providerId, type, sortBy],
+                "SELECT page, skip FROM cache WHERE provider_id = ? AND type = ? AND sortBy = ? AND ageRange = ? ORDER BY skip DESC LIMIT 1",
+                [providerId, type, sortBy, ageRange],
                 (err, row) => {
                     if (err) {
                         reject(err);
@@ -84,14 +84,14 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy) 
     }
 };
 
-const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = null) => {
+const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = null, ageRange = null) => {
     if (tmdbApiKey) {
         params.api_key = tmdbApiKey;
     }
 
     const { skip, type, sort_by: sortBy, ...queryParams } = params;
 
-    const page = providerId ? await determinePageFromSkip(providerId, skip, catalogDb, type, sortBy) : 1;
+    const page = providerId ? await determinePageFromSkip(providerId, skip, catalogDb, type, sortBy, ageRange) : 1;
 
     const queryParamsWithPage = {
         ...queryParams,
@@ -116,8 +116,8 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
 
     const data = await makeRequest(url, tmdbApiKey);
 
-    setCache(url, data, page, skip, providerId, type, sortBy);
-    log.debug(`Data stored in cache for URL: ${url} with page: ${page}, skip: ${skip}, providerId: ${providerId}, type: ${type}, sortBy: ${sortBy}`);
+    setCache(url, data, page, skip, providerId, type, sortBy, ageRange);
+    log.debug(`Data stored in cache for URL: ${url} with page: ${page}, skip: ${skip}, providerId: ${providerId}, type: ${type}, sortBy: ${sortBy}, ageRange: ${ageRange}`);
 
     return data;
 };
@@ -196,7 +196,7 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
 
     const fetchForRegion = async (region) => {
         params.watch_region = region;
-        return await fetchData(endpoint, params, tmdbApiKey, providerId);
+        return await fetchData(endpoint, params, tmdbApiKey, providerId, ageRange);
     };
 
     const results = await Promise.all(regions.map(region => fetchForRegion(region)));

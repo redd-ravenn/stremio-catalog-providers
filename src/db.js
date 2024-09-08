@@ -47,6 +47,7 @@ providersDb.serialize(() => {
         }
     });
 });
+
 catalogDb.serialize(() => {
     catalogDb.run(`CREATE TABLE IF NOT EXISTS cache (
         key TEXT PRIMARY KEY,
@@ -56,12 +57,13 @@ catalogDb.serialize(() => {
         skip INTEGER DEFAULT 0,
         provider_id INTEGER,
         type TEXT,
-        sortBy TEXT
+        sortBy TEXT,
+        ageRange TEXT
     )`, (err) => {
         if (err) {
             log.error('Error creating cache table:', err);
         } else {
-            log.debug('Cache table created or already exists with type and sort_by columns');
+            log.debug('Cache table created or already exists with type, sortBy, and ageRange columns');
         }
     });
 });
