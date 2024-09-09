@@ -101,10 +101,12 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
             const tier = rpdbkey.split("-")[0];
             const lang = language.split("-")[0];
             const baseUrl = `https://api.ratingposterdb.com/${rpdbkey}/tmdb/poster-default/${type}-${id}.jpg?fallback=true`;
-            return tier === "t1" || lang === "en"
+        
+            return (tier === "t0" || tier === "t1")
                 ? baseUrl
                 : `${baseUrl}&lang=${lang}`;
         };
+        
 
         const getPosterUrl = async (content, rpdbApiKey) => {
             const posterId = `poster:${content.id}`;
