@@ -107,7 +107,9 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
                 : `${baseUrl}&lang=${lang}`;
         };
         
-
+        const posterCacheQueue = new Set();
+        const cachedPosters = new Set();
+        
         const getPosterUrl = async (content, rpdbApiKey) => {
             const posterId = `poster:${content.id}`;
             
@@ -120,46 +122,66 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
             }
         
             let posterUrl;
-        
+            
             if (rpdbApiKey) {
                 const rpdbImage = getRpdbPoster(catalogType, content.id, language, rpdbApiKey);
+                log.debug(`Fetching RPDB poster from URL: ${rpdbImage}`);
+                
                 try {
-                    log.debug(`Fetching RPDB poster URL: ${rpdbImage}`);
-                    await axios.get(rpdbImage);
-                    posterUrl = rpdbImage;
+                    const response = await axios.head(rpdbImage);
+                    if (response.status === 200) {
+                        log.debug(`RPDB poster found for id ${posterId}`);
+                        posterUrl = rpdbImage;
+        
+                        if (!cachedPosters.has(posterId)) {
+                            posterCacheQueue.add({ id: posterId, url: posterUrl });
+                            cachedPosters.add(posterId);
+                        }
+                    } else {
+                        throw new Error('Not found');
+                    }
                 } catch (error) {
-                    log.warn('Error fetching RPDB poster, falling back to TMDB poster.');
+                    log.warn(`Error fetching RPDB poster: ${error.message}. Falling back to TMDB poster.`);
                     posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
                 }
             } else {
                 posterUrl = `https://image.tmdb.org/t/p/w500${content.poster_path}`;
             }
-        
+            
             return posterUrl;
         };
-
-        const filteredResults = discoverResults.results.filter(content => content.poster_path);
-
-        const metas = await Promise.all(filteredResults.map(async (content) => ({
-            id: `tmdb:${content.id}`,
-            type: catalogType === 'movies' ? 'movie' : 'series',
-            name: catalogType === 'movies' ? content.title : content.name,
-            poster: await getPosterUrl(content, rpdbApiKey),
-            background: `https://image.tmdb.org/t/p/w1280${content.backdrop_path}`,
-            description: content.overview,
-            year: catalogType === 'movies' ? content.release_date?.split('-')[0] : content.first_air_date?.split('-')[0],
-            imdbRating: content.vote_average ? content.vote_average.toFixed(1) : null,
-        })));
-
-        res.json({ metas });
-
-        filteredResults.forEach(async (content) => {
-            const posterId = `poster:${content.id}`;
-            const posterUrl = await getPosterUrl(content, rpdbApiKey);
-            if (rpdbApiKey && posterUrl !== `https://image.tmdb.org/t/p/w500${content.poster_path}`) {
-                setCachedPoster(posterId, posterUrl).catch(err => log.error(`Error caching poster: ${err.message}`));
+        
+        const cachePosters = async () => {
+            for (const { id, url } of posterCacheQueue) {
+                try {
+                    await setCachedPoster(id, url);
+                } catch (error) {
+                    log.error(`Failed to cache poster id ${id}: ${error.message}`);
+                }
             }
-        });
+            posterCacheQueue.clear();
+            cachedPosters.clear();
+        };
+        
+        const filteredResults = discoverResults.results.filter(content => content.poster_path);
+        
+        const metas = await Promise.all(filteredResults.map(async (content) => {
+            const posterUrl = await getPosterUrl(content, rpdbApiKey);
+            return {
+                id: `tmdb:${content.id}`,
+                type: catalogType === 'movies' ? 'movie' : 'series',
+                name: catalogType === 'movies' ? content.title : content.name,
+                poster: posterUrl,
+                background: `https://image.tmdb.org/t/p/w1280${content.backdrop_path}`,
+                description: content.overview,
+                year: catalogType === 'movies' ? content.release_date?.split('-')[0] : content.first_air_date?.split('-')[0],
+                imdbRating: content.vote_average ? content.vote_average.toFixed(1) : null,
+            };
+        }));
+        
+        res.json({ metas });
+        
+        await cachePosters();
 
     } catch (error) {
         log.error(`Error processing request: ${error.message}`);
