@@ -1,5 +1,4 @@
-{
-    "results": [
+const countries = [
       {
         "iso_3166_1": "AD",
         "english_name": "Andorra",
@@ -695,5 +694,4 @@
         "english_name": "Zimbabwe",
         "native_name": "Zimbabwe"
       }
-    ]
-  }
+    ];

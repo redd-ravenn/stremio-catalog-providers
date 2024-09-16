@@ -1,5 +1,5 @@
-const { catalogDb } = require('./db');
-const log = require('./utils/logger');
+const { catalogDb, metadataDb, episodesDb } = require('./db');
+const log = require('../helpers/logger');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -52,7 +52,7 @@ const setCache = (key, value, page = 1, skip = 0, providerId = null, type = null
     );
 };
 
-const posterDirectory = path.join(__dirname, '../db/rpdbPosters');
+const posterDirectory = path.join(__dirname, '../../db/rpdbPosters');
 
 if (!fs.existsSync(posterDirectory)) {
     fs.mkdirSync(posterDirectory, { recursive: true });
@@ -92,12 +92,64 @@ const setCachedPoster = async (posterId, posterUrl) => {
 };
 
 const cleanUpCache = () => {
+    if (DISABLE_CACHE === 'true') {
+        log.info('Cache is disabled, skipping cache cleanup.');
+        return;
+    }
+
     catalogDb.run("DELETE FROM cache WHERE expiration <= ?", [Date.now()], (err) => {
         if (err) {
             log.error('Failed to clean up cache:', err);
         } else {
             log.info('Cache cleanup completed successfully.');
         }
+    });
+};
+
+const setEpisodeCache = (episodeData) => {
+    const { id, show_id, season_number, episode_number, air_date, name, overview, production_code, runtime, still_path, vote_average, vote_count } = episodeData;
+
+    const insertSQL = `INSERT OR REPLACE INTO episodes 
+        (id, show_id, season_number, episode_number, air_date, name, overview, production_code, runtime, still_path, vote_average, vote_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+
+    episodesDb.run(insertSQL, [
+        id,
+        show_id,
+        season_number,
+        episode_number,
+        air_date,
+        name,
+        overview,
+        production_code,
+        runtime,
+        still_path,
+        vote_average,
+        vote_count
+    ], (err) => {
+        if (err) {
+            log.error(`Error inserting episode data into episodes.db for ID ${id}: ${err.message}`);
+        } else {
+            log.info(`Episode data inserted into episodes.db for ID ${id}`);
+        }
+    });
+};
+
+const getEpisodeCache = (show_id) => {
+    return new Promise((resolve, reject) => {
+        episodesDb.all("SELECT * FROM episodes WHERE show_id = ?", [show_id], (err, rows) => {
+            if (err) {
+                log.error(`Error fetching episodes data for show_id ${show_id}:`, err);
+                return reject(err);
+            }
+            if (rows && rows.length > 0) {
+                log.info(`Cache hit for all episodes of show_id ${show_id}`);
+                resolve(rows);
+            } else {
+                log.info(`Cache miss for all episodes of show_id ${show_id}`);
+                resolve(null);
+            }
+        });
     });
 };
 
@@ -108,5 +160,7 @@ module.exports = {
     setCache,
     cleanUpCache,
     getCachedPoster,
-    setCachedPoster
+    setCachedPoster,
+    getEpisodeCache,
+    setEpisodeCache
 };

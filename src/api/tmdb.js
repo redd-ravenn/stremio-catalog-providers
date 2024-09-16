@@ -1,22 +1,19 @@
 const axios = require('axios');
-const queue = require('./utils/queue');
-const { providersDb, genresDb, catalogDb } = require('./db');
-const { TMDB_BEARER_TOKEN, TMDB_LANGUAGE, TMDB_WATCH_REGION } = process.env;
-const { getCache, setCache } = require('./cache');
-const log = require('./utils/logger');
+const log = require('../helpers/logger');
+const addToQueue = require('../helpers/bottleneck');
+const { genresDb, catalogDb } = require('../helpers/db');
+const { getCache, setCache } = require('../helpers/cache');
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 const makeRequest = (url, tmdbApiKey = null) => {
-    const headers = {};
-
-    if (!tmdbApiKey) {
-        headers['Authorization'] = `Bearer ${TMDB_BEARER_TOKEN}`;
+    if (tmdbApiKey) {
+        url = `${url}${url.includes('?') ? '&' : '?'}api_key=${tmdbApiKey}`;
     }
 
     return new Promise((resolve, reject) => {
-        queue.push({
-            fn: () => axios.get(url, { headers })
+        addToQueue({
+            fn: () => axios.get(url)
                 .then(response => {
                     log.debug(`API request successful for URL: ${url}`);
                     resolve(response.data);
@@ -46,8 +43,8 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, 
         });
 
         if (cachedEntry) {
-            log.debug('Cached Entry:', cachedEntry);
-            log.debug('Determined Page from Cache:', cachedEntry.page);
+            log.debug(`Cached Entry: ${cachedEntry}`);
+            log.debug(`Determined Page from Cache: ${cachedEntry.page}`);
             return cachedEntry.page;
         }
 
@@ -65,7 +62,7 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, 
             );
         });
 
-        log.debug('Last Entry:', lastEntry);
+        log.debug(`Last Entry: ${lastEntry}`);
 
         if (lastEntry) {
             log.debug('Current Skip:', skip, 'Last Skip:', lastEntry.skip);
@@ -96,7 +93,7 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
     const queryParamsWithPage = {
         ...queryParams,
         page,
-        language: params.language || TMDB_LANGUAGE,
+        language: params.language,
     };
 
     if (sortBy) {
@@ -107,7 +104,7 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
 
     const url = `${TMDB_BASE_URL}${endpoint}?${queryString}`;
 
-    log.debug('Request URL:', url);
+    log.debug(`Request URL: ${url}`);
 
     const cachedData = await getCache(url, skip);
     if (cachedData) {
@@ -122,11 +119,12 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
     return data;
 };
 
-const discoverContent = async (type, watchProviders = [], ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language = TMDB_LANGUAGE, skip = 0) => {
+const discoverContent = async (type, watchProviders = [], ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language, skip = 0, regions = []) => {
     const mediaType = type === 'series' ? 'tv' : 'movie';
     const endpoint = `/discover/${mediaType}`;
 
-    const regions = TMDB_WATCH_REGION ? TMDB_WATCH_REGION.split(',') : [];
+    regions = regions && regions.length > 0 ? regions : [];
+
     const providerId = watchProviders[0];
 
     const params = {
@@ -195,7 +193,11 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
     }
 
     const fetchForRegion = async (region) => {
-        params.watch_region = region;
+        if (region) {
+            params.watch_region = region;
+        } else {
+            delete params.watch_region;
+        }
         return await fetchData(endpoint, params, tmdbApiKey, providerId, ageRange);
     };
 
@@ -211,133 +213,77 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
     };
 };
 
-const mergeProviders = (providers) => {
-    const merged = {};
-
-    providers.forEach(provider => {
-        const { provider_id, provider_name, logo_path } = provider;
-
-        if (!merged[provider_name]) {
-            merged[provider_name] = { provider_id, logo_path };
-        }
-    });
-
-    return Object.entries(merged).map(([provider_name, details]) => ({
-        provider_id: details.provider_id,
-        provider_name,
-        logo_path: details.logo_path
-    }));
-};
-
-const updateProviders = async () => {
-    try {
-        const regions = TMDB_WATCH_REGION ? TMDB_WATCH_REGION.split(',') : [];
-        const movieEndpoint = `/watch/providers/movie`;
-        const tvEndpoint = `/watch/providers/tv`;
-
-        const fetchProvidersForRegion = async (region) => {
-            const params = { watch_region: region };
-            const [movieData, tvData] = await Promise.all([
-                fetchData(movieEndpoint, params),
-                fetchData(tvEndpoint, params)
-            ]);
-            return [...movieData.results, ...tvData.results];
-        };
-
-        const results = await Promise.all(regions.map(region => fetchProvidersForRegion(region)));
-        const combinedProviders = mergeProviders(results.flat());
-
-        const insertOrUpdateProvider = providersDb.prepare(`
-            INSERT INTO providers (provider_id, provider_name, logo_path) 
-            VALUES (?, ?, ?)
-            ON CONFLICT(provider_id) DO UPDATE SET
-                provider_name = excluded.provider_name,
-                logo_path = excluded.logo_path;
-        `);
-
-        combinedProviders.forEach(provider => {
-            insertOrUpdateProvider.run(provider.provider_id, provider.provider_name, provider.logo_path);
-        });
-
-        insertOrUpdateProvider.finalize();
-        log.info('Providers update completed.');
-    } catch (error) {
-        log.error(`Error during providers update: ${error.message}`);
-    }
-};
-
-const scheduleUpdates = () => {
-    log.info('Scheduling provider and genre updates every 72 hours.');
-    setInterval(async () => {
-        log.info('Starting provider update...');
-        await updateProviders();
-
-        log.info('Starting genre update...');
-        await updateGenres();
-    }, 3 * 24 * 60 * 60 * 1000);
-};
-
-const getGenres = async (type) => {
+const fetchGenres = async (type, language, tmdbApiKey) => {
     const mediaType = type === 'series' ? 'tv' : 'movie';
     const endpoint = `/genre/${mediaType}/list`;
-    
-    const data = await fetchData(endpoint);
-    log.debug(`Genres retrieved for type ${type}`);
-    return data.genres;
+
+    try {
+        const params = {
+            language,
+            api_key: tmdbApiKey
+        };
+
+        const genresData = await fetchData(endpoint, params, tmdbApiKey);
+        log.debug(`Genres retrieved for ${type} (${language})`);
+        return genresData.genres;
+    } catch (error) {
+        log.error(`Error fetching genres from TMDB: ${error.message}`);
+        throw error;
+    }
 };
 
-const updateGenres = async () => {
-    try {
-        const genresMap = new Map();
+const storeGenresInDb = (genres, mediaType, language) => 
+    new Promise((resolve, reject) => {
+        genresDb.serialize(() => {
+            genresDb.run('BEGIN TRANSACTION');
+            const insertGenre = genresDb.prepare(`
+                INSERT INTO genres (genre_id, genre_name, media_type, language)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT DO NOTHING;
+            `);
 
-        const movieGenres = await getGenres('movie');
-        const tvGenres = await getGenres('series');
+            genres.forEach((genre, index) => {
+                insertGenre.run(genre.id, genre.name, mediaType, language, (err) => {
+                    if (err) {
+                        log.error(`Error inserting genre: ${err.message}`);
+                        genresDb.run('ROLLBACK');
+                        reject(err);
+                        return;
+                    }
 
-        movieGenres.concat(tvGenres).forEach(genre => {
-            if (genresMap.has(genre.name)) {
-                const existingGenre = genresMap.get(genre.name);
-                existingGenre.ids.push(genre.id);
-            } else {
-                genresMap.set(genre.name, {
-                    name: genre.name,
-                    ids: [genre.id],
-                    mediaTypes: new Set([genre.media_type || (movieGenres.includes(genre) ? 'movie' : 'tv')])
+                    if (index === genres.length - 1) {
+                        insertGenre.finalize();
+                        genresDb.run('COMMIT');
+                        log.info(`Genres stored for ${mediaType} (${language})`);
+                        resolve();
+                    }
                 });
-            }
-        });
-
-        const insertOrUpdateGenre = genresDb.prepare(`
-            INSERT INTO genres (genre_id, genre_name, media_type)
-            VALUES (?, ?, ?)
-            ON CONFLICT(genre_id) DO UPDATE SET
-                genre_name = excluded.genre_name,
-                media_type = excluded.media_type;
-        `);
-
-        genresMap.forEach((value) => {
-            const mediaTypes = Array.from(value.mediaTypes).join(',');
-            value.ids.forEach(id => {
-                insertOrUpdateGenre.run(id, value.name, mediaTypes);
             });
         });
+    });
 
-        insertOrUpdateGenre.finalize();
+const checkGenresExistForLanguage = async (language) => 
+    new Promise((resolve, reject) => {
+        log.debug(`Checking genres for ${language}`);
+        genresDb.get(
+            `SELECT 1 FROM genres WHERE language = ? LIMIT 1`,
+            [language], 
+            (err, row) => err ? reject(err) : resolve(!!row)
+        );
+    });
 
-        log.info('Genres update completed.');
+const fetchAndStoreGenres = async (language, tmdbApiKey) => {
+    try {
+        const movieGenres = await fetchGenres('movie', language, tmdbApiKey);
+        const tvGenres = await fetchGenres('series', language, tmdbApiKey);
+
+        await storeGenresInDb(movieGenres, 'movie', language);
+        await storeGenresInDb(tvGenres, 'tv', language);
+
+        log.info(`Genres fetched and stored for ${language}`);
     } catch (error) {
-        log.error(`Error during genres update: ${error.message}`);
+        log.error(`Error fetching/storing genres: ${error.message}`);
     }
 };
 
-(async () => {
-    try {
-        log.info('Initializing provider and genre updates.');
-        await updateProviders();
-        await updateGenres();
-        scheduleUpdates();
-    } catch (error) {
-        log.error(`Initialization error: ${error.message}`);
-    }
-})();
-
-module.exports = { makeRequest, fetchData, discoverContent, updateProviders, getGenres };
+module.exports = { makeRequest, fetchData, discoverContent, checkGenresExistForLanguage, fetchAndStoreGenres };

@@ -24,17 +24,6 @@ services:
       # Cache duration for RPDB poster content in days
       CACHE_POSTER_CONTENT_DURATION_DAYS: 7
 
-      # Authentication token for TMDB (define this value with your token, not api key, if you want to enable public instance, can be blank but user must define own api key)
-      TMDB_BEARER_TOKEN:
-
-      # Language for TMDB data
-      # Use ISO 639-1 language code (they're listed in doc/languages.json)
-      TMDB_LANGUAGE: fr
-
-      # Region for TMDB stream availability
-      # Use ISO 3166-1 region code (they're listed in doc/regions.json)
-      TMDB_WATCH_REGION: FR
-
       # Possible values: 'info' or 'debug'
       # Default is 'info' if not specified; 'debug' provides more detailed logs
       LOG_LEVEL: info
@@ -43,6 +32,14 @@ services:
       # For example, '3d' means logs will be kept for 3 days before being deleted
       # If not specified, the default value is '3d'
       LOG_INTERVAL_DELETION: 3d
+
+      # The environment in which the Node.js application is running
+      NODE_ENV: production      
+    volumes:
+      # Defines a volume for storing data from the container on the host.
+      # Replace /your/path/to/* with the path of your choice on the host where you want to store the data.
+      - /your/path/to/db:/usr/src/app/db
+      - /your/path/to/log:/usr/src/app/log
 ```
 
 ## Build
