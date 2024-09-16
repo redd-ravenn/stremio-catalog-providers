@@ -1016,24 +1016,32 @@
             }
           });
         
+          const encodeToBase64 = (str) => {
+            return btoa(unescape(encodeURIComponent(str)));
+          };
+
           const getStremioLink = () => {
-          const config = Object.fromEntries(new FormData(mainForm));
-          config.providers = selectedProviders;
-          config.ageRange = document.getElementById('ageRange').value;
-          config.tmdbApiKey = document.getElementById('tmdbApiKey').value.trim();
-          config.regions = selectedRegions;
-          config.filterContentWithoutPoster = document.getElementById('filterContentWithoutPoster').checked ? 'true' : '';
-          return "stremio://" + window.location.host + "/" + encodeURIComponent(JSON.stringify(config)) + "/manifest.json";
+            const config = Object.fromEntries(new FormData(mainForm));
+            config.providers = selectedProviders;
+            config.ageRange = document.getElementById('ageRange').value;
+            config.tmdbApiKey = document.getElementById('tmdbApiKey').value.trim();
+            config.regions = selectedRegions;
+            config.filterContentWithoutPoster = document.getElementById('filterContentWithoutPoster').checked ? 'true' : '';
+            
+            const encodedConfig = encodeToBase64(JSON.stringify(config));
+            return "stremio://" + window.location.host + "/" + encodedConfig + "/manifest.json";
           };
 
           const getHttpsLink = () => {
-          const config = Object.fromEntries(new FormData(mainForm));
-          config.providers = selectedProviders;
-          config.ageRange = document.getElementById('ageRange').value;
-          config.tmdbApiKey = document.getElementById('tmdbApiKey').value.trim();
-          config.regions = selectedRegions;
-          config.filterContentWithoutPoster = document.getElementById('filterContentWithoutPoster').checked ? 'true' : '';
-          return "https://" + window.location.host + "/" + encodeURIComponent(JSON.stringify(config)) + "/manifest.json";
+            const config = Object.fromEntries(new FormData(mainForm));
+            config.providers = selectedProviders;
+            config.ageRange = document.getElementById('ageRange').value;
+            config.tmdbApiKey = document.getElementById('tmdbApiKey').value.trim();
+            config.regions = selectedRegions;
+            config.filterContentWithoutPoster = document.getElementById('filterContentWithoutPoster').checked ? 'true' : '';
+
+            const encodedConfig = encodeToBase64(JSON.stringify(config));
+            return "https://" + window.location.host + "/" + encodedConfig + "/manifest.json";
           };
 
           const showPopup = (message, type) => {

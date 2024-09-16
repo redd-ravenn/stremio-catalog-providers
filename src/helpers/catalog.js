@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { genresDb, metadataDb } = require('../helpers/db');
+const { genresDb } = require('../helpers/db');
 const { discoverContent } = require('../api/tmdb');
 const { getCachedPoster, setCachedPoster } = require('../helpers/cache');
 const log = require('../helpers/logger');
@@ -37,8 +37,8 @@ async function getGenreId(genreName, type) {
     return genreRow ? genreRow.genre_id : null;
 }
 
-async function fetchDiscoverContent(catalogType, providers, ageRange, sortBy, genre, tmdbApiKey, language, skip, regions, trailerFallback) {
-    return await discoverContent(catalogType, providers, ageRange, sortBy, genre, tmdbApiKey, language, skip, regions, trailerFallback);
+async function fetchDiscoverContent(catalogType, providers, ageRange, sortBy, genre, tmdbApiKey, language, skip, regions, year = null, rating = null) {
+    return await discoverContent(catalogType, providers, ageRange, sortBy, genre, tmdbApiKey, language, skip, regions, year, rating);
 }
 
 function getRpdbPoster(type, id, language, rpdbkey) {

@@ -20,11 +20,16 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
         skip = isNaN(skipValue) ? 0 : skipValue;
     }
 
-    let genre = null;
-    if (extra.includes('genre=')) {
-        const genreName = extra.split('genre=')[1];
-        log.debug(`Extracting genre: ${genreName}`);
-        genre = await getGenreId(genreName, type);
+    const yearMatch = extra.match(/year=([^&]+)/);
+    const ratingMatch = extra.match(/rating=([^&]+)/);
+    const genreMatch = extra.match(/genre=([^&]+)/);
+
+    let year = yearMatch ? yearMatch[1] : null;
+    let rating = ratingMatch ? ratingMatch[1] : null;
+    let genre = genreMatch ? genreMatch[1] : null;
+
+    if (genre) {
+        genre = await getGenreId(genre, type);
     }
 
     try {
@@ -42,7 +47,8 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
             parsedConfig.language,
             skip,
             parsedConfig.regions,
-            parsedConfig.trailerFallback
+            year,
+            rating
         );
 
         let filteredResults = discoverResults.results;

@@ -4,7 +4,7 @@ const { checkGenresExistForLanguage, fetchAndStoreGenres } = require('../api/tmd
 
 const manifestTemplate = {
     id: 'community.tmdbstreamingcatalogproviders',
-    version: '1.0.0',
+    version: '0.3.0',
     name: 'TMDB Streaming Catalog Providers',
     description: 'Catalog from TMDB streaming providers.',
     resources: ['catalog'],
@@ -40,6 +40,28 @@ const getGenres = (type, language) =>
         });
     });
 
+const getCurrentYear = () => new Date().getFullYear();
+
+const generateYearIntervals = (startYear = 1880, endYear = getCurrentYear(), interval = 4) => {
+    const intervals = [];
+    endYear = Math.max(endYear, startYear);
+
+    for (let year = endYear; year >= startYear; year -= interval) {
+        const nextYear = Math.max(year - interval + 1, startYear);
+        intervals.push(`${nextYear}-${year}`);
+    }
+
+    const [firstStart, firstEnd] = intervals.length 
+        ? intervals[intervals.length - 1].split('-').map(Number) 
+        : [startYear, endYear];
+
+    if (firstStart > startYear) {
+        intervals[intervals.length - 1] = `${startYear}-${firstEnd}`;
+    }
+
+    return intervals.length ? intervals : [`${startYear}-${endYear}`];
+};    
+
 const generateManifest = async (config) => {
     try {
         const { providers, language, tmdbApiKey, ageRange } = config;
@@ -56,6 +78,7 @@ const generateManifest = async (config) => {
         ]);
 
         const genreOptions = (genres) => genres.map(genre => genre);
+        const yearIntervals = generateYearIntervals();
         const isKidsMode = ageRange && ageRange !== '18+';
 
         const providerInfo = await Promise.all(providers.map(providerId => getProvider(providerId)));
@@ -74,6 +97,8 @@ const generateManifest = async (config) => {
                     name: `${catalogType} - ${provider.provider_name}`,
                     extra: [
                         { name: 'genre', isRequired: false, options: genreOptions(base.type === 'movie' ? movieGenres : seriesGenres) },
+                        { name: "rating", options: ["8-10", "6-8", "4-6", "2-4", "0-2"], isRequired: false },
+                        { name: "year", options: yearIntervals, isRequired: false },
                         { name: 'skip', isRequired: false },
                         { name: 'ageRange', value: isKidsMode ? ageRange : '18+' }
                     ]

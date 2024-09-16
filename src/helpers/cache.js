@@ -1,4 +1,4 @@
-const { catalogDb, metadataDb, episodesDb } = require('./db');
+const { catalogDb, episodesDb } = require('./db');
 const log = require('../helpers/logger');
 const fs = require('fs');
 const path = require('path');

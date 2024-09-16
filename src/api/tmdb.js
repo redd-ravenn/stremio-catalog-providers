@@ -6,6 +6,8 @@ const { getCache, setCache } = require('../helpers/cache');
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
+const PREFETCH_PAGE_COUNT = process.env.PREFETCH_PAGE_COUNT ? parseInt(process.env.PREFETCH_PAGE_COUNT, 10) : 5;
+
 const makeRequest = (url, tmdbApiKey = null) => {
     if (tmdbApiKey) {
         url = `${url}${url.includes('?') ? '&' : '?'}api_key=${tmdbApiKey}`;
@@ -30,7 +32,7 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, 
     try {
         const cachedEntry = await new Promise((resolve, reject) => {
             catalogDb.get(
-                "SELECT page, skip FROM cache WHERE provider_id = ? AND skip = ? AND type = ? AND sortBy = ? AND ageRange = ? ORDER BY skip DESC LIMIT 1",
+                "SELECT page, skip FROM cache WHERE provider_id = ? AND skip <= ? AND type = ? AND sortBy = ? AND ageRange = ? ORDER BY skip DESC LIMIT 1",
                 [providerId, skip, type, sortBy, ageRange],
                 (err, row) => {
                     if (err) {
@@ -43,9 +45,11 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, 
         });
 
         if (cachedEntry) {
-            log.debug(`Cached Entry: ${cachedEntry}`);
-            log.debug(`Determined Page from Cache: ${cachedEntry.page}`);
-            return cachedEntry.page;
+            log.debug(`Cached Entry: Page ${cachedEntry.page}, Skip ${cachedEntry.skip}`);
+            
+            const nextPage = Math.ceil((skip + 1) / 20);
+            log.debug(`Determined Page to Serve: ${nextPage}`);
+            return nextPage;
         }
 
         const lastEntry = await new Promise((resolve, reject) => {
@@ -62,18 +66,13 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, 
             );
         });
 
-        log.debug(`Last Entry: ${lastEntry}`);
+        log.debug(`Last Entry in Cache: ${lastEntry ? `Page ${lastEntry.page}, Skip ${lastEntry.skip}` : 'None'}`);
 
         if (lastEntry) {
-            log.debug('Current Skip:', skip, 'Last Skip:', lastEntry.skip);
-
-            if (skip > lastEntry.skip) {
-                log.debug('Determined Page:', lastEntry.page + 1);
-                return lastEntry.page + 1;
-            }
+            return lastEntry.page + 1;
         }
 
-        log.debug('Default Page:', 1);
+        log.debug('Default to Page 1');
         return 1;
     } catch (error) {
         log.error('Error in determinePageFromSkip:', error);
@@ -94,6 +93,7 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
         ...queryParams,
         page,
         language: params.language,
+        type,
     };
 
     if (sortBy) {
@@ -113,13 +113,54 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
 
     const data = await makeRequest(url, tmdbApiKey);
 
-    setCache(url, data, page, skip, providerId, type, sortBy, ageRange);
-    log.debug(`Data stored in cache for URL: ${url} with page: ${page}, skip: ${skip}, providerId: ${providerId}, type: ${type}, sortBy: ${sortBy}, ageRange: ${ageRange}`);
+    if (data.total_pages >= page) {
+        setCache(url, data, page, skip, providerId, type, sortBy, ageRange);
+        log.debug(`Data stored in cache for URL: ${url} with page: ${page}, skip: ${skip}, providerId: ${providerId}, type: ${type}, sort_by: ${sortBy}, ageRange: ${ageRange}`);
+    } else {
+        log.debug(`Skipping cache: Page ${page} exceeds total_pages ${data.total_pages}`);
+    }
+
+    if (data.total_pages > page) {
+        prefetchNextPages(endpoint, queryParamsWithPage, page, data.total_pages, tmdbApiKey, providerId, ageRange);
+    }
 
     return data;
 };
 
-const discoverContent = async (type, watchProviders = [], ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language, skip = 0, regions = []) => {
+const prefetchNextPages = async (endpoint, queryParamsWithPage, currentPage, totalPages, tmdbApiKey, providerId, ageRange) => {
+    const prefetchPromises = [];
+
+    for (let i = 1; i <= PREFETCH_PAGE_COUNT; i++) {
+        const nextPage = currentPage + i;
+
+        if (nextPage > totalPages) {
+            log.debug(`Stopping prefetch: nextPage (${nextPage}) exceeds totalPages (${totalPages})`);
+            break;
+        }
+
+        const nextQueryParamsWithPage = { ...queryParamsWithPage, page: nextPage };
+        const nextQueryString = new URLSearchParams(nextQueryParamsWithPage).toString();
+        const nextUrl = `${TMDB_BASE_URL}${endpoint}?${nextQueryString}`;
+
+        log.debug(`Preparing to prefetch URL: ${nextUrl}`);
+
+        prefetchPromises.push(
+            (async () => {
+                try {
+                    const nextData = await makeRequest(nextUrl, tmdbApiKey);
+                    setCache(nextUrl, nextData, nextPage, (currentPage - 1) * 20 + nextPage * 20, providerId, queryParamsWithPage.type, queryParamsWithPage.sort_by, ageRange);
+                    log.debug(`Prefetched and stored data for URL: ${nextUrl} with page: ${nextPage}`);
+                } catch (error) {
+                    log.warn(`Error prefetching URL: ${nextUrl} - ${error.message}`);
+                }
+            })()
+        );
+    }
+
+    Promise.all(prefetchPromises).then(() => log.debug(`Finished prefetching pages after ${currentPage}`));
+};
+
+const discoverContent = async (type, watchProviders = [], ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language, skip = 0, regions = [], year = null, rating = null) => { 
     const mediaType = type === 'series' ? 'tv' : 'movie';
     const endpoint = `/discover/${mediaType}`;
 
@@ -134,6 +175,27 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
         skip,
         type
     };
+
+    if (year) {
+        const [startYear, endYear] = year.split('-');
+        if (startYear && endYear) {
+            if (mediaType === 'movie') {
+                params['primary_release_date.gte'] = `${startYear}-01-01`;
+                params['primary_release_date.lte'] = `${endYear}-12-31`;
+            } else if (mediaType === 'tv') {
+                params['first_air_date.gte'] = `${startYear}-01-01`;
+                params['first_air_date.lte'] = `${endYear}-12-31`;
+            }
+        }
+    }
+
+    if (rating) {
+        const [minRating, maxRating] = rating.split('-');
+        if (minRating && maxRating) {
+            params['vote_average.gte'] = minRating;
+            params['vote_average.lte'] = maxRating;
+        }
+    }
 
     if (ageRange) {
         switch(ageRange) {
@@ -198,6 +260,7 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
         } else {
             delete params.watch_region;
         }
+
         return await fetchData(endpoint, params, tmdbApiKey, providerId, ageRange);
     };
 
