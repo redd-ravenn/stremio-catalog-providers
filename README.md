@@ -1,6 +1,30 @@
-# Stremio Catalogs Providers
+# Stremio Catalog Providers
 
-Docker Compose : 
+## Key features
+
+- **Dynamic streaming platform management**: Manage over **600 streaming platforms**, adapting to user configurations on the addon's settings page.
+
+- **Popular and new movies and series**: Retrieve and organize content into popular and recent catalogs for easy access. The content, including titles and posters, is fetched in the language configured by the user.
+
+- **Region-specific content**: Aggregate region-specific content (e.g., Netflix FR, Netflix US) into a unified catalog, ensuring users have access to localized content.
+
+- **Age-based filtering (Kids catalog)**: Filter content based on set age ranges using US certifications, excluding inappropriate genres. Detailed guidelines are accessible via the "?" icon in the settings.
+
+- **Advanced catalog filtering**: Filter catalogs by genre, rating, and release year.
+
+- **Customizable catalog display**: Arrange catalog displays in the preferred order through the addon's configuration page.
+
+- **RPDB integration**: A web service that provides movie and series posters along with ratings, enhancing the visual and informational aspects of the catalogs.
+
+- **Progressive scraping**: Prefetch upcoming content pages as you scroll to enhance loading times. Ensuring smooth and reliable performance.
+
+- **Customizable cache management**:
+  - **Catalog cache duration**: Adjust cache duration through an environment variable to balance performance with content freshness.
+  - **RPDB poster caching**: Customize cache duration to reduce RPDB API load, also managed via an environment variable.
+
+- **Data sourced from TMDB**: All catalog data is sourced from TMDB, adhering to their Terms of Service. This product uses the TMDB API but is not endorsed or certified by TMDB. 
+
+## Docker Compose
 
 ```yaml
 version: '3.8'
@@ -66,7 +90,7 @@ To set up and run the project using a classic Node.js environment:
     node index.js
     ```
 
-## Docker Build
+## Docker build
 
 To build and run the project using Docker:
 
@@ -93,4 +117,4 @@ To build and run the project using Docker:
 Make sure to replace `yourusername` with your Docker Hub username or preferred image name.
 
 ## Contributing
-Thank you for considering contributing to the Stremio Catalogs Providers project! This project is currently in its very early stages of development, and we welcome any and all contributions. Whether you want to [report an issue](https://github.com/redd-ravenn/stremio-catalog-providers/issues), suggest a new feature, or submit a pull request, your involvement is greatly appreciated.
+Contribtutions are welcome and appreciated! This project is currently in its very early stages of development, and we welcome any and all contributions. Whether you want to [report an issue](https://github.com/redd-ravenn/stremio-catalog-providers/issues), suggest a new feature, or submit a pull request, your involvement is greatly appreciated.
