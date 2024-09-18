@@ -42,6 +42,15 @@ services:
       # URL to access the addon
       BASE_URL: http://localhost:7000
 
+      # These credentials are required to interact with the Trakt API and access its services.
+      # To obtain these credentials:
+      # 1. Create an account on Trakt.tv (https://trakt.tv).
+      # 2. Go to the applications section (https://trakt.tv/oauth/applications).
+      # 3. Create a new application by filling in the required information (name, description, etc.).
+      #    - For the "Redirect URL", use the following format: BASE_URL + /callback (e.g., http://localhost:7000/callback).
+      TRAKT_CLIENT_ID:
+      TRAKT_CLIENT_SECRET:
+
       # Cache duration for catalog content in days
       CACHE_CATALOG_CONTENT_DURATION_DAYS: 3
 

@@ -16,4 +16,11 @@ router.get("/:configParameters?/configure", (req, res) => {
     res.sendFile(path.join(__dirname, `../../public/configure.html`));
 });
 
+router.get('/env', (req, res) => {
+    log.info('Sending environment variable TRAKT_CLIENT_ID to client');
+    res.json({
+        TRAKT_CLIENT_ID: process.env.TRAKT_CLIENT_ID
+    });
+});
+
 module.exports = router;

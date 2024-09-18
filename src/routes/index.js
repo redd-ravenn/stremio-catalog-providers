@@ -4,27 +4,34 @@ const configureRoutes = require('./configure');
 const manifestRoutes = require('./manifest');
 const posterRoutes = require('./poster');
 const providersRoutes = require('./providers');
+const traktRoutes = require('./trakt');
 const log = require('../helpers/logger');
 
 const router = express.Router();
 
 const isBase64 = (str) => {
     try {
-        return btoa(atob(str)) === str;
+        return Buffer.from(str, 'base64').toString('base64') === str;
     } catch (err) {
         return false;
     }
 };
 
 const decodeBase64Middleware = (req, res, next) => {
+    if (req.path.startsWith('/callback')) {
+        return next();
+    }
+
     try {
         const pathParts = req.path.split('/');
 
         const decodedParts = pathParts.map(part => {
             if (isBase64(part)) {
                 try {
-                    return Buffer.from(part, 'base64').toString('utf8');
+                    const decoded = Buffer.from(part, 'base64').toString('utf8');
+                    return decoded;
                 } catch (e) {
+                    log.error(`Error decoding part: ${e.message}`);
                     return part;
                 }
             } else {
@@ -36,7 +43,7 @@ const decodeBase64Middleware = (req, res, next) => {
 
         next();
     } catch (error) {
-        log.error('Base64 decoding error :', error);
+        log.error('Base64 decoding error:', error);
         res.status(400).send('Bad request: Invalid base64 encoding.');
     }
 };
@@ -54,6 +61,7 @@ router.use(configureRoutes);
 router.use(manifestRoutes);
 router.use(posterRoutes);
 router.use(providersRoutes);
+router.use(traktRoutes);
 
 router.use((err, req, res, next) => {
     const errorTime = new Date().toISOString();

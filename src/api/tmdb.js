@@ -30,9 +30,14 @@ const makeRequest = (url, tmdbApiKey = null) => {
 
 const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, ageRange) => {
     try {
+        if (skip === 0) {
+            log.debug('Skip is 0, returning page 1');
+            return 1;
+        }
+
         const cachedEntry = await new Promise((resolve, reject) => {
             catalogDb.get(
-                "SELECT page, skip FROM cache WHERE provider_id = ? AND skip <= ? AND type = ? AND sortBy = ? AND ageRange = ? ORDER BY skip DESC LIMIT 1",
+                "SELECT page, skip FROM cache WHERE provider_id = ? AND skip >= ? AND type = ? AND sortBy = ? AND ageRange = ? ORDER BY skip ASC LIMIT 1",
                 [providerId, skip, type, sortBy, ageRange],
                 (err, row) => {
                     if (err) {
@@ -46,10 +51,7 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, 
 
         if (cachedEntry) {
             log.debug(`Cached Entry: Page ${cachedEntry.page}, Skip ${cachedEntry.skip}`);
-            
-            const nextPage = Math.ceil((skip + 1) / 20);
-            log.debug(`Determined Page to Serve: ${nextPage}`);
-            return nextPage;
+            return cachedEntry.page;
         }
 
         const lastEntry = await new Promise((resolve, reject) => {
@@ -69,6 +71,7 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, 
         log.debug(`Last Entry in Cache: ${lastEntry ? `Page ${lastEntry.page}, Skip ${lastEntry.skip}` : 'None'}`);
 
         if (lastEntry) {
+            log.debug(`Returning the next page: ${lastEntry.page + 1}`);
             return lastEntry.page + 1;
         }
 
@@ -79,6 +82,7 @@ const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, 
         return 1;
     }
 };
+
 
 const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = null, ageRange = null) => {
     if (tmdbApiKey) {
@@ -148,7 +152,7 @@ const prefetchNextPages = async (endpoint, queryParamsWithPage, currentPage, tot
             (async () => {
                 try {
                     const nextData = await makeRequest(nextUrl, tmdbApiKey);
-                    setCache(nextUrl, nextData, nextPage, (currentPage - 1) * 20 + nextPage * 20, providerId, queryParamsWithPage.type, queryParamsWithPage.sort_by, ageRange);
+                    setCache(nextUrl, nextData, nextPage, (nextPage - 1) * 20, providerId, queryParamsWithPage.type, queryParamsWithPage.sort_by, ageRange);
                     log.debug(`Prefetched and stored data for URL: ${nextUrl} with page: ${nextPage}`);
                 } catch (error) {
                     log.warn(`Error prefetching URL: ${nextUrl} - ${error.message}`);

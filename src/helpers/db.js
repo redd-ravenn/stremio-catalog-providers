@@ -20,11 +20,16 @@ const createDatabaseAndTable = (dbPath, tableName, createTableSQL) => {
     });
 
     db.serialize(() => {
-        db.run(createTableSQL, (err) => {
-            if (err) {
-                log.error(`Error creating ${tableName}:`, err);
-            } else {
-                log.debug(`${tableName} created or already exists`);
+        const commands = createTableSQL.split(';');
+        commands.forEach(command => {
+            if (command.trim()) {
+                db.run(command, (err) => {
+                    if (err) {
+                        log.error(`Error creating ${tableName}:`, err);
+                    } else {
+                        log.debug(`${tableName} table created or already exists`);
+                    }
+                });
             }
         });
     });
@@ -73,8 +78,31 @@ const genresDb = createDatabaseAndTable(
     )`
 );
 
+const traktDb = createDatabaseAndTable(
+    path.join(dbDir, 'trakt.db'),
+    'Trakt DB',
+    `CREATE TABLE IF NOT EXISTS trakt_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      last_fetched_at DATETIME DEFAULT NULL
+    );
+    CREATE TABLE IF NOT EXISTS trakt_history (
+      id INTEGER PRIMARY KEY,
+      username TEXT,
+      watched_at TEXT,
+      type TEXT,
+      title TEXT,
+      imdb_id TEXT,
+      tmdb_id INTEGER,
+      FOREIGN KEY (username) REFERENCES trakt_tokens(username) ON DELETE CASCADE
+    );`
+);
+  
 module.exports = {
     providersDb,
     catalogDb,
-    genresDb
+    genresDb,
+    traktDb
 };

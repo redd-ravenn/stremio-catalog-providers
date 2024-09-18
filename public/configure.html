@@ -635,6 +635,56 @@
       transform: translateX(20px);
     }
 
+    body.dark-mode .picmo__picker {
+        background-color: #444;
+        color: #f0f0f5;
+        border: 1px solid #666;
+    }
+
+    body.dark-mode .picmo__category {
+        background-color: #555;
+        color: #f0f0f5;
+    }
+
+    body.dark-mode .picmo__emoji {
+        background-color: #555;
+        color: #f0f0f5;
+    }
+
+    body.dark-mode .picmo__emoji:hover {
+        background-color: #666;
+    }
+
+    body.dark-mode .picmo__search {
+        background-color: #555;
+        color: #f0f0f5;
+        border: 1px solid #666;
+    }
+
+    body.dark-mode .picmo__search input {
+        background-color: #555;
+        color: #f0f0f5;
+        border: 1px solid #666;
+    }
+
+    body.dark-mode .picmo__footer {
+        background-color: #444;
+        border-top: 1px solid #666;
+    }
+
+    body.dark-mode .picmo__category-label {
+        color: #f0f0f5;
+    }
+
+    body.dark-mode .picmo__skin-tone-selector {
+        background-color: #555;
+        color: #f0f0f5;
+        border: 1px solid #666;
+    }
+
+    body.dark-mode .picmo__skin-tone-selector:hover {
+        background-color: #666;
+    }
     </style>
   </head>
 <html>
@@ -645,7 +695,8 @@
         <img src="/assets/logo.png" alt="Addon Logo" />
       </div>
       <h1 class="name">Streaming Catalog Providers</h1>
-      <h2 class="version">1.0.0</h2>
+      <h2 class="version">0.4.0</h2>
+      <h2 class="description">Catalog from TMDB streaming providers</h2>
     
       <div id="interface1">
         <div class="form-element">
@@ -656,7 +707,6 @@
       </div>
     
       <div id="interface2" style="display: none;">
-        <h2 class="description">Choose your streaming providers below.</h2>
         <div class="separator"></div>
         <h3 class="providers-title">Available providers</h3>
                 <div class="form-element">
@@ -701,6 +751,10 @@
           <div class="form-element">
             <label for="rpdbApiKey">RPDB API key (<a href="https://ratingposterdb.com/api-key/" target="_blank" style="color: #007aff;">Get it here</a>) </label>
             <input type="text" id="rpdbApiKey" name="rpdbApiKey">
+          </div>
+          <div class="separator"></div>
+          <div class="form-element">
+            <button type="button" id="connectTraktButton">Connect to Trakt</button>
           </div>
           <div class="separator"></div>
           <div class="form-element">
@@ -752,10 +806,127 @@
         </div>
       </div>
     </div>
+    <img id="countdownImage" src="/assets/countdown.webp" alt="Old Film Countdown" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:10000;">
     <script src="/js/languages.js"></script>
-    <script src="/js/countries.js"></script>
+    <script src="/js/countries.js"></script> 
       <script>
         document.addEventListener('DOMContentLoaded', () => {
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const traktUsername = urlParams.get('username');
+        if (traktUsername) {
+        const connectButton = document.getElementById('connectTraktButton');
+        connectButton.style.display = 'none';
+        
+        const usernameDisplay = document.createElement('div');
+        usernameDisplay.id = 'traktUsername';
+        usernameDisplay.textContent = `Connected as: ${traktUsername}`;
+        connectButton.parentNode.appendChild(usernameDisplay);
+
+        const toggleContainer = document.createElement('div');
+        toggleContainer.className = 'form-element';
+        toggleContainer.style.marginTop = '10px';
+        toggleContainer.style.display = 'inline-flex';
+        toggleContainer.style.alignItems = 'center';
+
+        const toggleLabel = document.createElement('label');
+        toggleLabel.setAttribute('for', 'hideTraktHistory');
+        toggleLabel.textContent = 'Mark the Trakt history as watched in the catalogs';
+        
+        const toggleSwitch = document.createElement('div');
+        toggleSwitch.className = 'toggle-switch';
+        
+        const toggleInput = document.createElement('input');
+        toggleInput.type = 'checkbox';
+        toggleInput.id = 'hideTraktHistory';
+        toggleInput.name = 'hideTraktHistory';
+        
+        const toggleSlider = document.createElement('span');
+        toggleSlider.className = 'slider';
+
+        toggleSwitch.appendChild(toggleInput);
+        toggleSwitch.appendChild(toggleSlider);
+        
+        toggleLabel.appendChild(toggleSwitch);
+        toggleContainer.appendChild(toggleLabel);
+
+        usernameDisplay.parentNode.appendChild(toggleContainer);
+
+        const additionalLabelContainer = document.createElement('div');
+        additionalLabelContainer.className = 'additional-label';
+        additionalLabelContainer.style.display = 'none';
+        additionalLabelContainer.style.alignItems = 'center';
+
+        const additionalLabel = document.createElement('label');
+        additionalLabel.textContent = 'Adds ✔️ in front of their name';
+
+        const emojiIcon = document.createElement('span');
+        emojiIcon.innerHTML = '⚙️';
+        emojiIcon.style.marginLeft = '10px';
+        emojiIcon.style.cursor = 'pointer';
+        emojiIcon.style.fontSize = '1em';
+
+        additionalLabelContainer.appendChild(additionalLabel);
+        additionalLabelContainer.appendChild(emojiIcon);
+        usernameDisplay.parentNode.appendChild(additionalLabelContainer);
+
+        const emojiContainer = document.createElement('div');
+        emojiContainer.style.position = 'fixed';
+        emojiContainer.style.display = 'none';
+        emojiContainer.style.backgroundColor = '#fff';
+        emojiContainer.style.border = '1px solid #ccc';
+        emojiContainer.style.zIndex = '1000';
+        emojiContainer.style.width = '90%';
+        emojiContainer.style.height = 'auto';
+        emojiContainer.style.maxWidth = '400px';
+        emojiContainer.style.maxHeight = '400px';
+        emojiContainer.style.overflow = 'auto';
+        emojiContainer.style.left = '50%';
+        emojiContainer.style.top = '50%';
+        emojiContainer.style.transform = 'translate(-50%, -50%)';
+        emojiContainer.style.boxSizing = 'border-box';
+        emojiContainer.style.borderRadius = '8px';
+        emojiContainer.style.scrollbarWidth = 'none';
+        emojiContainer.style.overflow = 'hidden';
+        document.body.appendChild(emojiContainer);
+
+        import('https://cdn.skypack.dev/picmo').then(({ createPicker }) => {
+            const picker = createPicker({
+                rootElement: emojiContainer,
+                theme: 'auto',
+            });
+
+            emojiIcon.addEventListener('click', (event) => {
+                event.stopPropagation();
+                event.preventDefault();
+
+                emojiContainer.style.display = 'block';
+
+                document.addEventListener('click', (event) => {
+                    if (!emojiContainer.contains(event.target) && !emojiIcon.contains(event.target)) {
+                        emojiContainer.style.display = 'none';
+                    }
+                });
+            });
+
+            picker.addEventListener('emoji:select', (event) => {
+                additionalLabel.textContent = `Adds ${event.emoji} in front of their name`;
+                emojiContainer.style.display = 'none';
+            });
+        });
+
+        toggleInput.addEventListener('change', function() {
+            if (toggleInput.checked) {
+                additionalLabelContainer.style.display = 'flex';
+                additionalLabelContainer.style.width = '100%';
+            } else {
+                additionalLabelContainer.style.display = 'none';
+            }
+        });
+    }
+
+
+
           function populateLanguageDropdown() {
             const dropdown = document.getElementById('language');
             languages.forEach(lang => {
@@ -982,21 +1153,24 @@
           });
         
           const addSelectedRegion = (regionCode, flag, countryName) => {
-            if (!selectedRegions.includes(regionCode)) {
-              selectedRegions.push(regionCode);
-              const tag = document.createElement('span');
-              tag.className = 'tag';
-              tag.setAttribute('data-id', regionCode);
-              tag.innerHTML = `
-                <span class="flag">${flag}</span>
-                <span class="country-name">${countryName}</span>
-              `;
-              tag.addEventListener('click', () => {
-                removeSelectedRegion(regionCode);
-              });
-              document.getElementById('regionSearchInput').parentNode.insertBefore(tag, document.getElementById('regionSearchInput'));
-            }
-          };
+          if (!selectedRegions.includes(regionCode)) {
+            selectedRegions.push(regionCode);
+          }
+
+          if (!document.querySelector(`.tag[data-id='${regionCode}']`)) {
+            const tag = document.createElement('span');
+            tag.className = 'tag';
+            tag.setAttribute('data-id', regionCode);
+            tag.innerHTML = `
+              <span class="flag">${flag}</span>
+              <span class="country-name">${countryName}</span>
+            `;
+            tag.addEventListener('click', () => {
+              removeSelectedRegion(regionCode);
+            });
+            document.getElementById('regionSearchInput').parentNode.insertBefore(tag, document.getElementById('regionSearchInput'));
+          }
+        };
         
           const removeSelectedRegion = (regionCode) => {
             selectedRegions = selectedRegions.filter(code => code !== regionCode);
@@ -1027,7 +1201,14 @@
             config.tmdbApiKey = document.getElementById('tmdbApiKey').value.trim();
             config.regions = selectedRegions;
             config.filterContentWithoutPoster = document.getElementById('filterContentWithoutPoster').checked ? 'true' : '';
-            
+
+            config.traktUsername = traktUsername || '';
+            config.hideTraktHistory = document.getElementById('hideTraktHistory') ? document.getElementById('hideTraktHistory').checked.toString() : 'false';
+
+            const additionalLabel = document.querySelector('.additional-label label');
+            const watchedEmoji = additionalLabel ? additionalLabel.textContent.split(' ')[1] || '✔️' : '✔️';
+            config.watchedEmoji = watchedEmoji;
+
             const encodedConfig = encodeToBase64(JSON.stringify(config));
             return "stremio://" + window.location.host + "/" + encodedConfig + "/manifest.json";
           };
@@ -1039,6 +1220,13 @@
             config.tmdbApiKey = document.getElementById('tmdbApiKey').value.trim();
             config.regions = selectedRegions;
             config.filterContentWithoutPoster = document.getElementById('filterContentWithoutPoster').checked ? 'true' : '';
+
+            config.traktUsername = traktUsername || '';
+            config.hideTraktHistory = document.getElementById('hideTraktHistory') ? document.getElementById('hideTraktHistory').checked.toString() : 'false';
+
+            const additionalLabel = document.querySelector('.additional-label label');
+            const watchedEmoji = additionalLabel ? additionalLabel.textContent.split(' ')[1] || '✔️' : '✔️';
+            config.watchedEmoji = watchedEmoji;
 
             const encodedConfig = encodeToBase64(JSON.stringify(config));
             return "https://" + window.location.host + "/" + encodedConfig + "/manifest.json";
@@ -1091,9 +1279,314 @@
             const isDarkMode = document.body.classList.contains('dark-mode');
             document.getElementById('theme-toggle').textContent = isDarkMode ? '🌞' : '🌙';
           });
+
+          let snakeGameActive = false;
+          const snakeGameCanvas = document.createElement('canvas');
+          const snakeGameContext = snakeGameCanvas.getContext('2d');
+          snakeGameCanvas.width = window.innerWidth;
+          snakeGameCanvas.height = window.innerHeight;
+          snakeGameCanvas.style.position = 'fixed';
+          snakeGameCanvas.style.top = '0';
+          snakeGameCanvas.style.left = '0';
+          snakeGameCanvas.style.zIndex = '1000';
+          snakeGameCanvas.style.backgroundColor = '#f0f0f0';
+          document.body.appendChild(snakeGameCanvas);
+          snakeGameCanvas.style.display = 'none';
+
+          const SNAKE_SIZE = Math.min(40, window.innerWidth / 20);
+          let snake;
+          let dx;
+          let dy;
+          let foodX;
+          let foodY;
+          let changingDirection;
+          let providersIcons = [];
+          let currentFoodIcon;
+          let eatenIcons = new Set();
+          let iconsCache = {};
+          let gameSpeed = 85;
+
+          const resetGame = () => {
+            snake = [
+              { x: 160, y: 160 },
+              { x: 160 - SNAKE_SIZE, y: 160 },
+              { x: 160 - 2 * SNAKE_SIZE, y: 160 },
+              { x: 160 - 3 * SNAKE_SIZE, y: 160 },
+            ];
+            dx = SNAKE_SIZE;
+            dy = 0;
+            changingDirection = false;
+            eatenIcons.clear();
+            generateFood();
+          };
+
+          const snakeGame = () => {
+            fetchProviderIcons();
+            resetGame();
+            document.getElementById('addon').style.display = 'none';
+            snakeGameCanvas.style.display = 'block';
+            snakeGameActive = true;
+            document.addEventListener('keydown', changeDirection);
+            addTouchControls();
+            main();
+          };
+
+          function main() {
+            if (hasGameEnded()) {
+              displayScoreAndIcons();
+              return;
+            }
+
+            if (eatenIcons.size === providersIcons.length) {
+              displayScoreAndIcons(true);
+              return;
+            }
+
+            setTimeout(() => {
+              changingDirection = false;
+              clearCanvas();
+              drawScore();
+              drawFood();
+              advanceSnake();
+              drawSnake();
+              main();
+            }, gameSpeed);
+          }
+
+          function clearCanvas() {
+            snakeGameContext.fillStyle = '#f0f0f0';
+            snakeGameContext.fillRect(0, 0, snakeGameCanvas.width, snakeGameCanvas.height);
+            snakeGameContext.strokeRect(0, 0, snakeGameCanvas.width, snakeGameCanvas.height);
+          }
+
+          function drawScore() {
+            snakeGameContext.font = '20px Arial';
+            snakeGameContext.fillStyle = 'black';
+            snakeGameContext.textAlign = 'left';
+            snakeGameContext.textBaseline = 'top';
+            snakeGameContext.fillText('Score: ' + eatenIcons.size, 10, 10);
+          }
+
+          function drawSnake() {
+            for (let i = 0; i < snake.length; i++) {
+              if (i === 0) {
+                drawSnakeHead(snake[i]);
+              } else {
+                drawSnakePart(snake[i]);
+              }
+            }
+          }
+
+          function drawSnakeHead(snakePart) {
+            snakeGameContext.fillStyle = 'lightgreen';
+            snakeGameContext.strokeStyle = 'darkgreen';
+            snakeGameContext.lineWidth = 2;
+            snakeGameContext.fillRect(snakePart.x, snakePart.y, SNAKE_SIZE, SNAKE_SIZE);
+            snakeGameContext.strokeRect(snakePart.x, snakePart.y, SNAKE_SIZE, SNAKE_SIZE);
+
+            snakeGameContext.fillStyle = 'black';
+            snakeGameContext.beginPath();
+            snakeGameContext.arc(snakePart.x + 10, snakePart.y + 10, 3, 0, 2 * Math.PI);
+            snakeGameContext.arc(snakePart.x + 30, snakePart.y + 10, 3, 0, 2 * Math.PI);
+            snakeGameContext.fill();
+
+            snakeGameContext.strokeStyle = 'red';
+            snakeGameContext.lineWidth = 2;
+            snakeGameContext.beginPath();
+            snakeGameContext.moveTo(snakePart.x + 20, snakePart.y + 20);
+            snakeGameContext.lineTo(snakePart.x + 20, snakePart.y + 35);
+            snakeGameContext.stroke();
+          }
+
+          function drawSnakePart(snakePart) {
+            snakeGameContext.fillStyle = 'lightgreen';
+            snakeGameContext.strokeStyle = 'darkgreen';
+            snakeGameContext.fillRect(snakePart.x, snakePart.y, SNAKE_SIZE, SNAKE_SIZE);
+            snakeGameContext.strokeRect(snakePart.x, snakePart.y, SNAKE_SIZE, SNAKE_SIZE);
+          }
+
+          function advanceSnake() {
+            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+            snake.unshift(head);
+
+            if (Math.abs(head.x - foodX) < SNAKE_SIZE && Math.abs(head.y - foodY) < SNAKE_SIZE) {
+              eatenIcons.add(currentFoodIcon);
+              generateFood();
+            } else {
+              snake.pop();
+            }
+          }
+
+          function changeDirection(event) {
+            const keyPressed = event.keyCode;
+            const goingUp = dy === -SNAKE_SIZE;
+            const goingDown = dy === SNAKE_SIZE;
+            const goingRight = dx === SNAKE_SIZE;
+            const goingLeft = dx === -SNAKE_SIZE;
+
+            if (changingDirection) return;
+            changingDirection = true;
+
+            if (keyPressed === 37 && !goingRight) {
+              dx = -SNAKE_SIZE;
+              dy = 0;
+            }
+            if (keyPressed === 38 && !goingDown) {
+              dx = 0;
+              dy = -SNAKE_SIZE;
+            }
+            if (keyPressed === 39 && !goingLeft) {
+              dx = SNAKE_SIZE;
+              dy = 0;
+            }
+            if (keyPressed === 40 && !goingUp) {
+              dx = 0;
+              dy = SNAKE_SIZE;
+            }
+          }
+
+          function fetchProviderIcons() {
+            const providerElements = document.querySelectorAll('#providers .provider img');
+            providersIcons = Array.from(providerElements).map(img => img.src);
+
+            providersIcons.forEach(iconSrc => {
+              const img = new Image();
+              img.src = iconSrc;
+              iconsCache[iconSrc] = img;
+            });
+          }
+
+          function generateFood() {
+            if (providersIcons.length === 0) return;
+
+            const availableIcons = providersIcons.filter(icon => !eatenIcons.has(icon));
+            currentFoodIcon = availableIcons[Math.floor(Math.random() * availableIcons.length)];
+
+            foodX = Math.round((Math.random() * (snakeGameCanvas.width - SNAKE_SIZE)) / SNAKE_SIZE) * SNAKE_SIZE;
+            foodY = Math.round((Math.random() * (snakeGameCanvas.height - SNAKE_SIZE)) / SNAKE_SIZE) * SNAKE_SIZE;
+          }
+
+          function drawFood() {
+            const foodImage = iconsCache[currentFoodIcon];
+            if (foodImage) {
+              snakeGameContext.drawImage(foodImage, foodX, foodY, SNAKE_SIZE, SNAKE_SIZE);
+              snakeGameContext.strokeStyle = 'red';
+              snakeGameContext.lineWidth = 2;
+              snakeGameContext.strokeRect(foodX, foodY, SNAKE_SIZE, SNAKE_SIZE);
+            }
+          }
+
+          function hasGameEnded() {
+            for (let i = 4; i < snake.length; i++) {
+              const hasCollided = snake[i].x === snake[0].x && snake[i].y === snake[0].y;
+              if (hasCollided) return true;
+            }
+
+            const hitLeftWall = snake[0].x < 0;
+            const hitRightWall = snake[0].x >= snakeGameCanvas.width;
+            const hitTopWall = snake[0].y < 0;
+            const hitBottomWall = snake[0].y >= snakeGameCanvas.height;
+
+            return hitLeftWall || hitRightWall || hitTopWall || hitBottomWall;
+          }
+
+          function displayScoreAndIcons(won = false) {
+            clearCanvas();
+            snakeGameContext.font = '30px Arial';
+            snakeGameContext.fillStyle = 'black';
+            snakeGameContext.textAlign = 'center';
+            const message = won ? 'Congratulations, you won!' : 'Game Over!';
+            snakeGameContext.fillText(message, snakeGameCanvas.width / 2, snakeGameCanvas.height / 2 - 40);
+            snakeGameContext.fillText('Score: ' + eatenIcons.size, snakeGameCanvas.width / 2, snakeGameCanvas.height / 2);
+
+            let startX = snakeGameCanvas.width / 2 - (eatenIcons.size * (SNAKE_SIZE / 2));
+            let startY = snakeGameCanvas.height / 2 + 40;
+            let iconsPerRow = Math.floor(snakeGameCanvas.width / (SNAKE_SIZE + 10));
+
+            let currentIconIndex = 0;
+            eatenIcons.forEach(iconSrc => {
+              const img = new Image();
+              img.src = iconSrc;
+              img.onload = () => {
+                snakeGameContext.drawImage(img, startX, startY, SNAKE_SIZE, SNAKE_SIZE);
+                currentIconIndex++;
+                startX += SNAKE_SIZE + 10;
+
+                if (currentIconIndex >= iconsPerRow) {
+                  startX = snakeGameCanvas.width / 2 - (eatenIcons.size * (SNAKE_SIZE / 2));
+                  startY += SNAKE_SIZE + 10;
+                  currentIconIndex = 0;
+                }
+              };
+            });
+
+            createQuitButton();
+          }
+
+          function createQuitButton() {
+            const quitButton = document.createElement('button');
+            quitButton.textContent = 'Quit';
+            quitButton.style.position = 'fixed';
+            quitButton.style.top = '20px';
+            quitButton.style.right = '20px';
+            quitButton.style.zIndex = '1001';
+            quitButton.style.padding = '10px 20px';
+            quitButton.style.fontSize = '20px';
+            quitButton.style.backgroundColor = '#ff4d4d';
+            quitButton.style.color = 'white';
+            quitButton.style.border = 'none';
+            quitButton.style.borderRadius = '5px';
+            quitButton.style.cursor = 'pointer';
+            document.body.appendChild(quitButton);
+
+            quitButton.onclick = () => {
+              snakeGameCanvas.style.display = 'none';
+              document.getElementById('addon').style.display = 'block';
+              document.getElementById('searchProviders').value = '';
+              quitButton.remove();
+              snakeGameActive = false;
+            };
+          }
+
+          function addTouchControls() {
+            let touchStartX = 0;
+            let touchStartY = 0;
+            snakeGameCanvas.addEventListener('touchstart', function (event) {
+              event.preventDefault();
+              touchStartX = event.touches[0].clientX;
+              touchStartY = event.touches[0].clientY;
+            });
+
+            snakeGameCanvas.addEventListener('touchmove', function (event) {
+              event.preventDefault();
+              const touchEndX = event.touches[0].clientX;
+              const touchEndY = event.touches[0].clientY;
+              const dx = touchEndX - touchStartX;
+              const dy = touchEndY - touchStartY;
+
+              if (Math.abs(dx) > Math.abs(dy)) {
+                if (dx > 0 && dx >= 20 && !changingDirection) changeDirection({ keyCode: 39 });
+                if (dx < 0 && dx <= -20 && !changingDirection) changeDirection({ keyCode: 37 });
+              } else {
+                if (dy > 0 && dy >= 20 && !changingDirection) changeDirection({ keyCode: 40 });
+                if (dy < 0 && dy <= -20 && !changingDirection) changeDirection({ keyCode: 38 });
+              }
+              touchStartX = touchEndX;
+              touchStartY = touchEndY;
+            });
+          }
         
           document.getElementById('searchProviders').addEventListener('input', function(event) {
             const searchTerm = event.target.value.toLowerCase();
+
+            if (searchTerm === 'snake') {
+              if (!snakeGameActive) {
+                snakeGame();
+              } else {
+                alert('The game is already running!');
+              }
+            }
+
             document.querySelectorAll('#providers .provider').forEach(providerElement => {
               const providerId = providerElement.getAttribute('data-id');
               const providerName = providersMap[providerId].provider_name.toLowerCase();
@@ -1123,54 +1616,74 @@
           return {};
           }
 
+          
           function prefillFormFromUrlParams() {
-            const params = getQueryParams();
+          const params = getQueryParams();
 
-            if (params.tmdbApiKey) {
-              document.getElementById('tmdbApiKey').value = params.tmdbApiKey;
-              confirmButton.click();
-            }
+          const tmdbApiKey = localStorage.getItem('tmdbApiKey');
+          const language = localStorage.getItem('language');
+          const ageRange = localStorage.getItem('ageRange');
+          const rpdbApiKey = localStorage.getItem('rpdbApiKey');
+          const savedProviders = localStorage.getItem('selectedProviders');
+          const savedRegions = localStorage.getItem('selectedRegions');
+          const filterContentWithoutPoster = localStorage.getItem('filterContentWithoutPoster');
 
-            if (params.language) {
-              document.getElementById('language').value = params.language;
-            }
+          if (tmdbApiKey) {
+            document.getElementById('tmdbApiKey').value = tmdbApiKey;
+            confirmButton.click();
+          }
 
-            if (params.ageRange) {
-              document.getElementById('ageRange').value = params.ageRange;
-            }
+          if (language) {
+            document.getElementById('language').value = language;
+          }
 
-            if (params.rpdbApiKey) {
-              document.getElementById('rpdbApiKey').value = params.rpdbApiKey;
-            }
+          if (ageRange) {
+            document.getElementById('ageRange').value = ageRange;
+          }
 
-            if (params.filterContentWithoutPoster === 'true') {
-              document.getElementById('filterContentWithoutPoster').checked = true;
-            }
+          if (rpdbApiKey) {
+            document.getElementById('rpdbApiKey').value = rpdbApiKey;
+          }
 
-            if (params.providers) {
-              selectedProviders = params.providers;
+          if (filterContentWithoutPoster === 'true') {
+            document.getElementById('filterContentWithoutPoster').checked = true;
+          } else if (filterContentWithoutPoster === 'false') {
+            document.getElementById('filterContentWithoutPoster').checked = false;
+          }
 
-              if (providersData.length > 0) {
+          if (savedProviders) {
+            selectedProviders = JSON.parse(savedProviders);
+
+            if (providersData.length > 0) {
+              populateProvidersMap();
+              renderSelectedProviders();
+            } else {
+              confirmButton.addEventListener('providersLoaded', () => {
                 populateProvidersMap();
                 renderSelectedProviders();
-              } else {
-                confirmButton.addEventListener('providersLoaded', () => {
-                  populateProvidersMap();
-                  renderSelectedProviders();
-                }, { once: true });
-              }
-            }
-
-            if (params.regions) {
-              params.regions.forEach(regionCode => {
-                const country = countries.find(c => c.iso_3166_1 === regionCode);
-                if (country) {
-                  const flag = country.iso_3166_1.toUpperCase().replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
-                  addSelectedRegion(country.iso_3166_1, flag, country.english_name);
-                }
-              });
+              }, { once: true });
             }
           }
+
+          if (savedRegions) {
+            selectedRegions = JSON.parse(savedRegions);
+            selectedRegions.forEach(regionCode => {
+              const country = countries.find(c => c.iso_3166_1 === regionCode);
+              if (country) {
+                const flag = country.iso_3166_1.toUpperCase().replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
+                addSelectedRegion(regionCode, flag, country.english_name);
+              }
+            });
+          }
+
+          localStorage.removeItem('tmdbApiKey');
+          localStorage.removeItem('language');
+          localStorage.removeItem('ageRange');
+          localStorage.removeItem('rpdbApiKey');
+          localStorage.removeItem('selectedProviders');
+          localStorage.removeItem('selectedRegions');
+          localStorage.removeItem('filterContentWithoutPoster');
+        }
 
           const populateProvidersMap = () => {
             providersData.forEach(provider => {
@@ -1179,6 +1692,60 @@
           };
 
           prefillFormFromUrlParams();
+
+          fetch('/env')
+            .then(response => response.json())
+            .then(env => {
+                document.getElementById('connectTraktButton').addEventListener('click', () => {
+                    localStorage.setItem('tmdbApiKey', document.getElementById('tmdbApiKey').value.trim());
+                    localStorage.setItem('language', document.getElementById('language').value);
+                    localStorage.setItem('ageRange', document.getElementById('ageRange').value);
+                    localStorage.setItem('rpdbApiKey', document.getElementById('rpdbApiKey').value);
+                    localStorage.setItem('selectedProviders', JSON.stringify(selectedProviders));
+                    localStorage.setItem('selectedRegions', JSON.stringify(selectedRegions));
+                    localStorage.setItem('filterContentWithoutPoster', document.getElementById('filterContentWithoutPoster').checked ? 'true' : 'false');
+
+                    const clientId = env.TRAKT_CLIENT_ID;
+                    const redirectUri = `${window.location.origin}/callback`;
+
+                    const traktAuthUrl = `https://trakt.tv/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+                    window.location.href = traktAuthUrl;
+                });
+            })
+            .catch(error => console.error('Error fetching environment variables:', error));
+
+            const logo = document.querySelector('.logo');
+            let logoClickCount = 0;
+            let countdownActive = false;
+
+            logo.addEventListener('click', () => {
+              if (!countdownActive) {
+                logoClickCount++;
+                if (logoClickCount >= 5) {
+                  startCountdown();
+                }
+              }
+            });
+
+            function startCountdown() {
+              const countdownImage = document.getElementById('countdownImage');
+              const addonContent = document.getElementById('addon');
+              countdownActive = true;
+              logoClickCount = 0;
+
+              addonContent.style.display = 'none'; 
+
+              countdownImage.style.display = 'none';
+              countdownImage.src = '';
+              countdownImage.src = '/assets/countdown.webp';
+              countdownImage.style.display = 'block';
+
+              setTimeout(() => {
+                countdownImage.style.display = 'none';
+                window.location.href = 'https://www.youtube.com/watch?v=GFq6wH5JR2A&t=43s';
+              }, 10000);
+            }
         });
         </script>
   </body>
