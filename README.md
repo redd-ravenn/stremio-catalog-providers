@@ -14,6 +14,12 @@
 
 - **Customizable catalog display**: Arrange catalog displays in the preferred order through the addon's configuration page.
 
+- **Trakt Integration**:
+  - **Sync Trakt history**: Synchronize your Trakt watch history with Stremio, ensuring your watched items are marked in your catalogs with a custom emoji of your choice.
+  - **Automatic synchronization**: Trakt history sync occurs automatically everyday, interval can be customized through an environment variable.
+  - **Token refresh**: Automatic token refresh, avoiding the need for reauthentication every three months.
+  - **Mark content as watched**: Users can manually mark content as watched on Trakt directly from Stremio, with the flexibility to rename or translate the action button text according to their language.
+
 - **RPDB integration**: A web service that provides movie and series posters along with ratings, enhancing the visual and informational aspects of the catalogs.
 
 - **Progressive scraping**: Prefetch upcoming content pages as you scroll to enhance loading times. Ensuring smooth and reliable performance.
@@ -50,6 +56,11 @@ services:
       #    - For the "Redirect URL", use the following format: BASE_URL + /callback (e.g., http://localhost:7000/callback).
       TRAKT_CLIENT_ID:
       TRAKT_CLIENT_SECRET:
+
+      # Allows you to define the interval for synchronizing the Trakt watch history
+      # The value can be expressed in hours (h) or days (d)
+      # Default is '1d'
+      TRAKT_HISTORY_FETCH_INTERVAL: 1d
 
       # Cache duration for catalog content in days
       CACHE_CATALOG_CONTENT_DURATION_DAYS: 3
