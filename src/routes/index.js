@@ -18,9 +18,10 @@ const isBase64 = (str) => {
 };
 
 const decodeBase64Middleware = (req, res, next) => {
-    if (req.path.startsWith('/callback')) {
+    if (req.path.startsWith('/callback') || req.path.startsWith('/updateWatched')) {
         return next();
     }
+    
 
     try {
         const pathParts = req.path.split('/');

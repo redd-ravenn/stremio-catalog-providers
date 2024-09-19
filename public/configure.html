@@ -309,6 +309,70 @@
         transition: background-color 0.3s, transform 0.2s;
       }
 
+      #connectTraktButton {
+        background-color: #e9e9ed;
+        color: #333;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 20px;
+        border: none;
+        cursor: pointer;
+        border-radius: 8px;
+      }
+
+      #connectTraktButton:hover {
+        background-color: #d3d3d3;
+        color: #333;
+      }
+
+      .trakt-logo {
+        width: 38px;
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 10px;
+        vertical-align: middle;
+      }
+
+      #connectTraktButton span {
+        display: inline-block;
+        vertical-align: middle;
+      }
+
+      @media (max-width: 768px) {
+        #connectTraktButton {
+          margin: 0 auto;
+          display: flex; 
+          align-items: center;
+          justify-content: center;
+          padding: 12px 20px;
+        }
+
+        #connectTraktButton span {
+          display: inline-block;
+          vertical-align: middle;
+        }
+
+        .trakt-logo {
+          width: 36px;
+          height: 36px;
+          margin-right: 8px;
+        }
+      }
+
+      body.dark-mode #connectTraktButton {
+        background-color: #555;
+        color: #f0f0f5;
+        border: 1px solid #666;
+      }
+
+      body.dark-mode #connectTraktButton:hover {
+        background-color: #666;
+        color: #f0f0f5;
+      }
+
       #confirmButton {
         background-color: #007aff;
       }
@@ -754,7 +818,10 @@
           </div>
           <div class="separator"></div>
           <div class="form-element">
-            <button type="button" id="connectTraktButton">Connect to Trakt</button>
+            <button type="button" id="connectTraktButton">
+              <img src="/assets/logoTrakt.png" alt="Trakt Logo" class="trakt-logo">
+              Connect to Trakt
+            </button>
           </div>
           <div class="separator"></div>
           <div class="form-element">
@@ -815,116 +882,169 @@
         const urlParams = new URLSearchParams(window.location.search);
         const traktUsername = urlParams.get('username');
         if (traktUsername) {
-        const connectButton = document.getElementById('connectTraktButton');
-        connectButton.style.display = 'none';
-        
-        const usernameDisplay = document.createElement('div');
-        usernameDisplay.id = 'traktUsername';
-        usernameDisplay.textContent = `Connected as: ${traktUsername}`;
-        connectButton.parentNode.appendChild(usernameDisplay);
+    const connectButton = document.getElementById('connectTraktButton');
+    connectButton.style.display = 'none';
 
-        const toggleContainer = document.createElement('div');
-        toggleContainer.className = 'form-element';
-        toggleContainer.style.marginTop = '10px';
-        toggleContainer.style.display = 'inline-flex';
-        toggleContainer.style.alignItems = 'center';
+    const usernameDisplay = document.createElement('div');
+    usernameDisplay.id = 'traktUsername';
+    usernameDisplay.textContent = `Connected as: ${traktUsername}`;
+    connectButton.parentNode.appendChild(usernameDisplay);
 
-        const toggleLabel = document.createElement('label');
-        toggleLabel.setAttribute('for', 'hideTraktHistory');
-        toggleLabel.textContent = 'Mark the Trakt history as watched in the catalogs';
-        
-        const toggleSwitch = document.createElement('div');
-        toggleSwitch.className = 'toggle-switch';
-        
-        const toggleInput = document.createElement('input');
-        toggleInput.type = 'checkbox';
-        toggleInput.id = 'hideTraktHistory';
-        toggleInput.name = 'hideTraktHistory';
-        
-        const toggleSlider = document.createElement('span');
-        toggleSlider.className = 'slider';
+    const toggleContainer = document.createElement('div');
+    toggleContainer.className = 'form-element';
+    toggleContainer.style.marginTop = '10px';
+    toggleContainer.style.marginBottom = '10px';
+    toggleContainer.style.display = 'flex';
+    toggleContainer.style.flexDirection = 'column';
 
-        toggleSwitch.appendChild(toggleInput);
-        toggleSwitch.appendChild(toggleSlider);
-        
-        toggleLabel.appendChild(toggleSwitch);
-        toggleContainer.appendChild(toggleLabel);
+    const toggleLabel = document.createElement('label');
+    toggleLabel.setAttribute('for', 'hideTraktHistory');
+    toggleLabel.textContent = 'Mark the Trakt history as watched in the catalogs';
 
-        usernameDisplay.parentNode.appendChild(toggleContainer);
+    const toggleSwitch = document.createElement('div');
+    toggleSwitch.className = 'toggle-switch';
 
-        const additionalLabelContainer = document.createElement('div');
-        additionalLabelContainer.className = 'additional-label';
-        additionalLabelContainer.style.display = 'none';
-        additionalLabelContainer.style.alignItems = 'center';
+    const toggleInput = document.createElement('input');
+    toggleInput.type = 'checkbox';
+    toggleInput.id = 'hideTraktHistory';
+    toggleInput.name = 'hideTraktHistory';
 
-        const additionalLabel = document.createElement('label');
-        additionalLabel.textContent = 'Adds ✔️ in front of their name';
+    const toggleSlider = document.createElement('span');
+    toggleSlider.className = 'slider';
 
-        const emojiIcon = document.createElement('span');
-        emojiIcon.innerHTML = '⚙️';
-        emojiIcon.style.marginLeft = '10px';
-        emojiIcon.style.cursor = 'pointer';
-        emojiIcon.style.fontSize = '1em';
+    toggleSwitch.appendChild(toggleInput);
+    toggleSwitch.appendChild(toggleSlider);
 
-        additionalLabelContainer.appendChild(additionalLabel);
-        additionalLabelContainer.appendChild(emojiIcon);
-        usernameDisplay.parentNode.appendChild(additionalLabelContainer);
+    toggleLabel.appendChild(toggleSwitch);
+    toggleContainer.appendChild(toggleLabel);
 
-        const emojiContainer = document.createElement('div');
-        emojiContainer.style.position = 'fixed';
-        emojiContainer.style.display = 'none';
-        emojiContainer.style.backgroundColor = '#fff';
-        emojiContainer.style.border = '1px solid #ccc';
-        emojiContainer.style.zIndex = '1000';
-        emojiContainer.style.width = '90%';
-        emojiContainer.style.height = 'auto';
-        emojiContainer.style.maxWidth = '400px';
-        emojiContainer.style.maxHeight = '400px';
-        emojiContainer.style.overflow = 'auto';
-        emojiContainer.style.left = '50%';
-        emojiContainer.style.top = '50%';
-        emojiContainer.style.transform = 'translate(-50%, -50%)';
-        emojiContainer.style.boxSizing = 'border-box';
-        emojiContainer.style.borderRadius = '8px';
-        emojiContainer.style.scrollbarWidth = 'none';
-        emojiContainer.style.overflow = 'hidden';
-        document.body.appendChild(emojiContainer);
+    usernameDisplay.parentNode.appendChild(toggleContainer);
 
-        import('https://cdn.skypack.dev/picmo').then(({ createPicker }) => {
-            const picker = createPicker({
-                rootElement: emojiContainer,
-                theme: 'auto',
-            });
+    const additionalLabelContainer = document.createElement('div');
+    additionalLabelContainer.className = 'additional-label';
+    additionalLabelContainer.style.display = 'none';
+    additionalLabelContainer.style.alignItems = 'center';
 
-            emojiIcon.addEventListener('click', (event) => {
-                event.stopPropagation();
-                event.preventDefault();
+    const additionalLabel = document.createElement('label');
+    additionalLabel.textContent = 'Adds ✔️ in front of their name';
 
-                emojiContainer.style.display = 'block';
+    const emojiIcon = document.createElement('span');
+    emojiIcon.innerHTML = '⚙️';
+    emojiIcon.style.marginLeft = '10px';
+    emojiIcon.style.cursor = 'pointer';
+    emojiIcon.style.fontSize = '1em';
 
-                document.addEventListener('click', (event) => {
-                    if (!emojiContainer.contains(event.target) && !emojiIcon.contains(event.target)) {
-                        emojiContainer.style.display = 'none';
-                    }
-                });
-            });
+    additionalLabelContainer.appendChild(additionalLabel);
+    additionalLabelContainer.appendChild(emojiIcon);
+    usernameDisplay.parentNode.appendChild(additionalLabelContainer);
 
-            picker.addEventListener('emoji:select', (event) => {
-                additionalLabel.textContent = `Adds ${event.emoji} in front of their name`;
-                emojiContainer.style.display = 'none';
+    const emojiContainer = document.createElement('div');
+    emojiContainer.style.position = 'fixed';
+    emojiContainer.style.display = 'none';
+    emojiContainer.style.backgroundColor = '#fff';
+    emojiContainer.style.border = '1px solid #ccc';
+    emojiContainer.style.zIndex = '1000';
+    emojiContainer.style.width = '90%';
+    emojiContainer.style.height = 'auto';
+    emojiContainer.style.maxWidth = '400px';
+    emojiContainer.style.maxHeight = '400px';
+    emojiContainer.style.overflow = 'auto';
+    emojiContainer.style.left = '50%';
+    emojiContainer.style.top = '50%';
+    emojiContainer.style.transform = 'translate(-50%, -50%)';
+    emojiContainer.style.boxSizing = 'border-box';
+    emojiContainer.style.borderRadius = '8px';
+    emojiContainer.style.scrollbarWidth = 'none';
+    emojiContainer.style.overflow = 'hidden';
+    document.body.appendChild(emojiContainer);
+
+    import('https://cdn.skypack.dev/picmo').then(({ createPicker }) => {
+        const picker = createPicker({
+            rootElement: emojiContainer,
+            theme: 'auto',
+        });
+
+        emojiIcon.addEventListener('click', (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+
+            emojiContainer.style.display = 'block';
+
+            document.addEventListener('click', (event) => {
+                if (!emojiContainer.contains(event.target) && !emojiIcon.contains(event.target)) {
+                    emojiContainer.style.display = 'none';
+                }
             });
         });
 
-        toggleInput.addEventListener('change', function() {
-            if (toggleInput.checked) {
-                additionalLabelContainer.style.display = 'flex';
-                additionalLabelContainer.style.width = '100%';
-            } else {
-                additionalLabelContainer.style.display = 'none';
-            }
+        picker.addEventListener('emoji:select', (event) => {
+            additionalLabel.textContent = `Adds ${event.emoji} in front of their name`;
+            emojiContainer.style.display = 'none';
         });
-    }
+    });
 
+    toggleInput.addEventListener('change', function() {
+        if (toggleInput.checked) {
+            additionalLabelContainer.style.display = 'flex';
+            additionalLabelContainer.style.width = '100%';
+        } else {
+            additionalLabelContainer.style.display = 'none';
+        }
+    });
+
+    const traktToggleContainer = document.createElement('div');
+    traktToggleContainer.className = 'form-element';
+    traktToggleContainer.style.marginTop = '10px';
+    traktToggleContainer.style.marginBottom = '10px';
+    traktToggleContainer.style.display = 'flex';
+    traktToggleContainer.style.flexDirection = 'column';
+
+    const traktToggleLabel = document.createElement('label');
+    traktToggleLabel.setAttribute('for', 'addWatchedButton');
+    traktToggleLabel.textContent = 'Add a mark as watched button to update Trakt';
+
+    const traktToggleSwitch = document.createElement('div');
+    traktToggleSwitch.className = 'toggle-switch';
+
+    const traktToggleInput = document.createElement('input');
+    traktToggleInput.type = 'checkbox';
+    traktToggleInput.id = 'addWatchedButton';
+    traktToggleInput.name = 'addWatchedButton';
+
+    const traktToggleSlider = document.createElement('span');
+    traktToggleSlider.className = 'slider';
+
+    traktToggleSwitch.appendChild(traktToggleInput);
+    traktToggleSwitch.appendChild(traktToggleSlider);
+
+    traktToggleLabel.appendChild(traktToggleSwitch);
+    traktToggleContainer.appendChild(traktToggleLabel);
+
+    usernameDisplay.parentNode.appendChild(traktToggleContainer);
+
+    const markAsWatchedContainer = document.createElement('div');
+    markAsWatchedContainer.style.display = 'none';
+    markAsWatchedContainer.style.marginTop = '10px';
+
+    const markAsWatchedTextbox = document.createElement('input');
+    markAsWatchedTextbox.type = 'text';
+    markAsWatchedTextbox.value = 'Mark as watched';
+    markAsWatchedTextbox.id = 'markAsWatchedTextbox';
+    markAsWatchedTextbox.style.width = '100%';
+    markAsWatchedTextbox.style.padding = '8px';
+    markAsWatchedTextbox.style.fontSize = '16px';
+
+    markAsWatchedContainer.appendChild(markAsWatchedTextbox);
+    usernameDisplay.parentNode.appendChild(markAsWatchedContainer);
+
+    traktToggleInput.addEventListener('change', function() {
+        if (traktToggleInput.checked) {
+            markAsWatchedContainer.style.display = 'block';
+        } else {
+            markAsWatchedContainer.style.display = 'none';
+        }
+    });
+}
 
 
           function populateLanguageDropdown() {
@@ -1209,6 +1329,12 @@
             const watchedEmoji = additionalLabel ? additionalLabel.textContent.split(' ')[1] || '✔️' : '✔️';
             config.watchedEmoji = watchedEmoji;
 
+            const addWatchedTraktBtnToggle = document.getElementById('addWatchedButton');
+            if (addWatchedTraktBtnToggle && addWatchedTraktBtnToggle.checked) {
+                const markAsWatchedTextbox = document.getElementById('markAsWatchedTextbox');
+                config.addWatchedTraktBtn = markAsWatchedTextbox ? markAsWatchedTextbox.value.trim() : '';
+            }
+
             const encodedConfig = encodeToBase64(JSON.stringify(config));
             return "stremio://" + window.location.host + "/" + encodedConfig + "/manifest.json";
           };
@@ -1227,6 +1353,12 @@
             const additionalLabel = document.querySelector('.additional-label label');
             const watchedEmoji = additionalLabel ? additionalLabel.textContent.split(' ')[1] || '✔️' : '✔️';
             config.watchedEmoji = watchedEmoji;
+
+            const addWatchedTraktBtnToggle = document.getElementById('addWatchedButton');
+            if (addWatchedTraktBtnToggle && addWatchedTraktBtnToggle.checked) {
+                const markAsWatchedTextbox = document.getElementById('markAsWatchedTextbox');
+                config.addWatchedTraktBtn = markAsWatchedTextbox ? markAsWatchedTextbox.value.trim() : '';
+            }
 
             const encodedConfig = encodeToBase64(JSON.stringify(config));
             return "https://" + window.location.host + "/" + encodedConfig + "/manifest.json";

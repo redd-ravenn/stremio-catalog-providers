@@ -1,15 +1,13 @@
 const express = require('express');
-const axios = require('axios');
-const { traktDb } = require('../helpers/db');
-const { saveUserTokens, fetchUserWatchedMovies, fetchUserWatchedShows, saveUserWatchedHistory } = require('../helpers/trakt');
+const { saveUserTokens, fetchUserWatchedMovies, fetchUserWatchedShows, fetchUserTokens } = require('../helpers/trakt');
+const { fetchUserProfile, exchangeCodeForToken, markContentAsWatched, saveUserWatchedHistory, lookupTraktId } = require('../api/trakt');
 const log = require('../helpers/logger');
 const router = express.Router();
 
-const { TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET, BASE_URL } = process.env;
-const TRAKT_REDIRECT_URI = `${BASE_URL}/callback`;
+const { TRAKT_CLIENT_ID } = process.env;
 
-if (!TRAKT_CLIENT_ID || !TRAKT_CLIENT_SECRET || !TRAKT_REDIRECT_URI) {
-  log.warn('Environment variables TRAKT_CLIENT_ID orTRAKT_CLIENT_SECRET are not set.');
+if (!TRAKT_CLIENT_ID) {
+  log.warn('Environment variables TRAKT_CLIENT_ID is not set.');
 }
 
 router.get('/callback', async (req, res) => {
@@ -21,58 +19,22 @@ router.get('/callback', async (req, res) => {
   }
 
   try {
-    const response = await axios.post('https://api.trakt.tv/oauth/token', {
-      code: code,
-      client_id: TRAKT_CLIENT_ID,
-      client_secret: TRAKT_CLIENT_SECRET,
-      redirect_uri: TRAKT_REDIRECT_URI,
-      grant_type: 'authorization_code',
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
-
-    const { access_token, refresh_token } = response.data;
+    const { access_token, refresh_token } = await exchangeCodeForToken(code);
 
     if (!access_token || !refresh_token) {
       log.error('Received tokens are invalid or missing.');
       return res.status(500).send('Error receiving tokens.');
     }
 
-    const userProfileResponse = await axios.get('https://api.trakt.tv/users/me', {
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        'trakt-api-version': '2',
-        'trakt-api-key': TRAKT_CLIENT_ID,
-      }
-    });
-
-    const username = userProfileResponse.data.username;
-    log.info(`Received username: ${username}`);
+    const userProfile = await fetchUserProfile(access_token);
+    const username = userProfile.username;
 
     if (!username) {
       log.error('Received username is invalid or missing.');
       return res.status(500).send('Error receiving username.');
     }
 
-    const lastFetchedRow = await new Promise((resolve, reject) => {
-      traktDb.get(`SELECT last_fetched_at FROM trakt_tokens WHERE username = ?`, [username], (err, row) => {
-        if (err) {
-          log.error(`Error checking last fetched time for user ${username}: ${err.message}`);
-          return reject(err);
-        }
-        resolve(row);
-      });
-    });
-
-    const lastFetchedAt = lastFetchedRow ? new Date(lastFetchedRow.last_fetched_at) : null;
     const now = new Date();
-
-    if (lastFetchedAt && (now - lastFetchedAt) < 24 * 60 * 60 * 1000) {
-      log.info(`User ${username} history was already fetched in the last 24 hours.`);
-      return res.redirect(`/configure?username=${encodeURIComponent(username)}`);
-    }
 
     await saveUserTokens(username, access_token, refresh_token);
     log.info(`Successfully saved tokens and username for user ${username}.`);
@@ -91,20 +53,54 @@ router.get('/callback', async (req, res) => {
 
     log.info(`Successfully saved watched history for user ${username} in the database.`);
 
-    await new Promise((resolve, reject) => {
-      traktDb.run(`UPDATE trakt_tokens SET last_fetched_at = ? WHERE username = ?`, [now.toISOString(), username], (err) => {
-        if (err) {
-          log.error(`Error updating last fetched time for user ${username}: ${err.message}`);
-          return reject(err);
-        }
-        resolve();
-      });
-    });
-
     res.redirect(`/configure?username=${encodeURIComponent(username)}`);
   } catch (error) {
     log.error(`Error during token exchange: ${error.response ? error.response.data : error.message}`);
     res.status(500).send('Error connecting to Trakt');
+  }
+});
+
+router.get('/:configParameters?/updateWatched/:username/:type/:tmdbId', async (req, res) => {
+  const { username, type, tmdbId } = req.params;
+
+  if (!username) {
+      return res.status(400).send('Invalid parameter: username is required');
+  }
+
+  if (!['movies', 'series'].includes(type)) {
+      return res.status(400).send(`Invalid parameter: type must be 'movies' or 'series', received '${type}'`);
+  }
+
+  if (!tmdbId) {
+      return res.status(400).send('Invalid parameter: tmdbId is required');
+  }
+
+  try {
+      const { access_token, refresh_token } = await fetchUserTokens(username);
+
+      if (!access_token || !refresh_token) {
+          log.error(`Tokens missing for user ${username}`);
+          return res.status(500).send('Error retrieving tokens');
+      }
+
+      const traktId = await lookupTraktId(tmdbId, type.slice(0, -1), access_token);
+
+      const watched_at = new Date().toISOString();
+
+      const response = await markContentAsWatched(access_token, type, traktId, watched_at);
+
+      if (!response) {
+          log.error(`Failed to mark content as watched for user ${username}`);
+          return res.status(500).send('Error marking content as watched');
+      }
+
+      log.info(`Content ID ${traktId} of type ${type} marked as watched for user ${username}.`);
+
+      const traktUrl = `https://trakt.tv/users/${username}/history/${type === 'movies' ? 'movies' : 'shows'}`;
+      return res.redirect(traktUrl);
+  } catch (error) {
+      log.error(`Error in /updateWatched: ${error.message}`);
+      return res.status(500).send('Internal server error');
   }
 });
 

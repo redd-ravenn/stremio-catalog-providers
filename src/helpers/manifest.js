@@ -4,7 +4,7 @@ const { checkGenresExistForLanguage, fetchAndStoreGenres } = require('../api/tmd
 
 const manifestTemplate = {
     id: 'community.tmdbstreamingcatalogproviders',
-    version: '0.4.0',
+    version: '0.5.0',
     name: 'TMDB Streaming Catalog Providers',
     description: 'Catalog from TMDB streaming providers.',
     resources: ['catalog'],

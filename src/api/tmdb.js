@@ -1,6 +1,6 @@
 const axios = require('axios');
 const log = require('../helpers/logger');
-const addToQueue = require('../helpers/bottleneck');
+const addToQueueTMDB = require('../helpers/bottleneck_tmdb');
 const { genresDb, catalogDb } = require('../helpers/db');
 const { getCache, setCache } = require('../helpers/cache');
 
@@ -14,7 +14,7 @@ const makeRequest = (url, tmdbApiKey = null) => {
     }
 
     return new Promise((resolve, reject) => {
-        addToQueue({
+        addToQueueTMDB({
             fn: () => axios.get(url)
                 .then(response => {
                     log.debug(`API request successful for URL: ${url}`);

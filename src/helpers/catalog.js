@@ -4,6 +4,8 @@ const { discoverContent } = require('../api/tmdb');
 const { getCachedPoster, setCachedPoster } = require('../helpers/cache');
 const log = require('../helpers/logger');
 
+const baseUrl = process.env.BASE_URL || 'http://localhost:7000';
+
 async function parseConfigParameters(configParameters) {
     let parsedConfig = {};
     if (configParameters) {
@@ -74,7 +76,7 @@ async function getPosterUrl(content, catalogType, language, rpdbApiKey) {
     return posterUrl;
 }
 
-async function buildMetas(filteredResults, catalogType, language, rpdbApiKey) {
+async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, addWatchedTraktBtn, hideTraktHistory, traktUsername) {
     return await Promise.all(filteredResults.map(async (content) => {
         const posterUrl = await getPosterUrl(content, catalogType, language, rpdbApiKey);
 
@@ -87,7 +89,7 @@ async function buildMetas(filteredResults, catalogType, language, rpdbApiKey) {
                 : content.first_air_date.split('-')[0]
             : '';
 
-        const links = await buildLinks(content); 
+        const links = await buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername); 
 
         return {
             id: `tmdb:${content.id}`,
@@ -102,7 +104,7 @@ async function buildMetas(filteredResults, catalogType, language, rpdbApiKey) {
     }));
 }
 
-async function buildLinks(content) {
+async function buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername) {
     const links = [];
 
     if (content.genre_ids) {
@@ -127,6 +129,14 @@ async function buildLinks(content) {
             name: content.vote_average.toFixed(1),
             category: 'imdb',
             url: `https://imdb.com/title/tt${content.id}`
+        });
+    }
+
+    if (addWatchedTraktBtn && addWatchedTraktBtn.trim() !== '' && hideTraktHistory === 'true' && traktUsername) {
+        links.push({
+            name: addWatchedTraktBtn,
+            category: 'Trakt',
+            url: `${baseUrl}/updateWatched/${traktUsername}/${catalogType}/${content.id}`
         });
     }
 
