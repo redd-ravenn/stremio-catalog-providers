@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { genresDb } = require('../helpers/db');
+const { pool } = require('./db');
 const { discoverContent } = require('../api/tmdb');
 const { getCachedPoster, setCachedPoster } = require('../helpers/cache');
 const log = require('../helpers/logger');
@@ -30,13 +30,16 @@ function extractCatalogInfo(id) {
 }
 
 async function getGenreId(genreName, type) {
-    const genreRow = await new Promise((resolve, reject) => {
-        genresDb.get("SELECT genre_id FROM genres WHERE genre_name = ? AND media_type = ?", [genreName, type === 'series' ? 'tv' : 'movie'], (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-        });
-    });
-    return genreRow ? genreRow.genre_id : null;
+    try {
+        const result = await pool.query(
+            "SELECT genre_id FROM genres WHERE genre_name = $1 AND media_type = $2", 
+            [genreName, type === 'series' ? 'tv' : 'movie']
+        );
+        const row = result.rows[0];
+        return row ? row.genre_id : null;
+    } catch (err) {
+        throw err;
+    }
 }
 
 async function fetchDiscoverContent(catalogType, providers, ageRange, sortBy, genre, tmdbApiKey, language, skip, regions, year = null, rating = null) {
@@ -76,20 +79,36 @@ async function getPosterUrl(content, catalogType, language, rpdbApiKey) {
     return posterUrl;
 }
 
-async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, addWatchedTraktBtn, hideTraktHistory, traktUsername) {
+async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, addWatchedTraktBtn, hideTraktHistory, traktUsername, origin) {
     return await Promise.all(filteredResults.map(async (content) => {
         const posterUrl = await getPosterUrl(content, catalogType, language, rpdbApiKey);
 
-
         let releaseInfo = catalogType === 'movies'
-        ? content.release_date ? content.release_date.split('-')[0] : ''
-        : content.first_air_date 
-            ? content.last_air_date 
-                ? `${content.first_air_date.split('-')[0]}-${content.last_air_date.split('-')[0]}`
-                : content.first_air_date.split('-')[0]
-            : '';
+            ? content.release_date ? content.release_date.split('-')[0] : ''
+            : content.first_air_date 
+                ? content.last_air_date 
+                    ? `${content.first_air_date.split('-')[0]}-${content.last_air_date.split('-')[0]}`
+                    : content.first_air_date.split('-')[0]
+                : '';
 
-        const links = await buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername); 
+        let links = null;
+        let imdbRating = null;
+        let genres = null;
+
+        if (origin === 'https://web.stremio.com') {
+            links = await buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername);
+        } else {
+            imdbRating = content.vote_average ? content.vote_average.toFixed(1) : null;
+            
+            genres = await Promise.all(
+                content.genre_ids.map(async (genreId) => {
+                    const genreName = await getGenreName(genreId, catalogType);
+                    return genreName;
+                })
+            );
+            
+            genres = genres.filter(Boolean);
+        }
 
         return {
             id: `tmdb:${content.id}`,
@@ -99,7 +118,9 @@ async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, ad
             background: `https://image.tmdb.org/t/p/w1280${content.backdrop_path}`,
             description: content.overview,
             releaseInfo: releaseInfo || null,
-            links
+            ...(links && { links }),
+            ...(imdbRating && { imdbRating }),
+            ...(genres && genres.length > 0 && { genres })
         };
     }));
 }
@@ -144,12 +165,16 @@ async function buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHis
 }
 
 async function getGenreName(genreId, type) {
-    return new Promise((resolve, reject) => {
-        genresDb.get("SELECT genre_name FROM genres WHERE genre_id = ? AND media_type = ?", [genreId, type === 'series' ? 'tv' : 'movie'], (err, row) => {
-            if (err) reject(err);
-            else resolve(row ? row.genre_name : null);
-        });
-    });
+    try {
+        const result = await pool.query(
+            "SELECT genre_name FROM genres WHERE genre_id = $1 AND media_type = $2", 
+            [genreId, type === 'series' ? 'tv' : 'movie']
+        );
+        const row = result.rows[0];
+        return row ? row.genre_name : null;
+    } catch (err) {
+        throw err;
+    }
 }
 
 module.exports = {

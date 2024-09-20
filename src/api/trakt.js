@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { traktDb } = require('../helpers/db');
+const { pool } = require('../helpers/db');
 const log = require('../helpers/logger');
 const { addToQueueGET, addToQueuePOST } = require('../helpers/bottleneck_trakt');
 
@@ -122,8 +122,8 @@ const refreshTraktToken = async (refreshToken) => {
 };
 
 const updateTokensInDb = async (username, newAccessToken, newRefreshToken) => {
-    await traktDb.run(
-        'UPDATE trakt_tokens SET access_token = ?, refresh_token = ? WHERE username = ?',
+    await pool.query(
+        'UPDATE trakt_tokens SET access_token = $1, refresh_token = $2 WHERE username = $3',
         [newAccessToken, newRefreshToken, username]
     );
 };
@@ -161,31 +161,23 @@ async function handleTraktHistory(parsedConfig, filteredResults) {
         }
     })();
 
-    const lastFetchedRow = await new Promise((resolve, reject) => {
-        traktDb.get(`SELECT last_fetched_at FROM trakt_tokens WHERE username = ?`, [traktUsername], (err, row) => {
-            if (err) {
-                log.error(`Error checking last fetched time for user ${traktUsername}: ${err.message}`);
-                return reject(err);
-            }
-            resolve(row);
-        });
-    });
+    const result = await pool.query(
+        `SELECT last_fetched_at FROM trakt_tokens WHERE username = $1`,
+        [traktUsername]
+    );
 
+    const lastFetchedRow = result.rows[0];
     const lastFetchedAt = lastFetchedRow ? new Date(lastFetchedRow.last_fetched_at) : null;
     const now = new Date();
 
     if (!lastFetchedAt || (now - lastFetchedAt) >= intervalInMs) {
         try {
-            const tokensRow = await new Promise((resolve, reject) => {
-                traktDb.get(`SELECT access_token, refresh_token FROM trakt_tokens WHERE username = ?`, [traktUsername], (err, row) => {
-                    if (err) {
-                        log.error(`Error retrieving Trakt tokens for user ${traktUsername}: ${err.message}`);
-                        return reject(err);
-                    }
-                    resolve(row);
-                });
-            });
+            const tokensResult = await pool.query(
+                `SELECT access_token, refresh_token FROM trakt_tokens WHERE username = $1`,
+                [traktUsername]
+            );
 
+            const tokensRow = tokensResult.rows[0];
             if (tokensRow) {
                 let { access_token, refresh_token } = tokensRow;
 
@@ -223,30 +215,22 @@ async function handleTraktHistory(parsedConfig, filteredResults) {
                     }
                 }
 
-                await new Promise((resolve, reject) => {
-                    traktDb.run(`UPDATE trakt_tokens SET last_fetched_at = ? WHERE username = ?`, [now.toISOString(), traktUsername], (err) => {
-                        if (err) {
-                            log.error(`Error updating last fetched time for user ${traktUsername}: ${err.message}`);
-                            return reject(err);
-                        }
-                        resolve();
-                    });
-                });
+                await pool.query(
+                    `UPDATE trakt_tokens SET last_fetched_at = $1 WHERE username = $2`,
+                    [now.toISOString(), traktUsername]
+                );
             }
         } catch (error) {
             log.error(`Error fetching Trakt history for user ${traktUsername}: ${error.message}`);
         }
     }
 
-    const traktIds = await new Promise((resolve, reject) => {
-        traktDb.all(`SELECT tmdb_id FROM trakt_history WHERE username = ? AND tmdb_id IS NOT NULL`, [traktUsername], (err, rows) => {
-            if (err) {
-                log.error(`Error fetching Trakt history for user ${traktUsername}: ${err.message}`);
-                return reject(err);
-            }
-            resolve(rows.map(row => `tmdb:${row.tmdb_id}`));
-        });
-    });
+    const traktIdsResult = await pool.query(
+        `SELECT tmdb_id FROM trakt_history WHERE username = $1 AND tmdb_id IS NOT NULL`,
+        [traktUsername]
+    );
+
+    const traktIds = traktIdsResult.rows.map(row => `tmdb:${row.tmdb_id}`);
 
     return filteredResults.map(content => {
         const contentId = `tmdb:${content.id}`;
@@ -257,69 +241,54 @@ async function handleTraktHistory(parsedConfig, filteredResults) {
     });
 }
 
-const saveUserWatchedHistory = (username, history) => {
-    return new Promise((resolve, reject) => {
-        if (!history || history.length === 0) {
-            log.warn(`No history to save for user ${username}.`);
-            return resolve();
+const saveUserWatchedHistory = async (username, history) => {
+    if (!history || history.length === 0) {
+        log.warn(`No history to save for user ${username}.`);
+        return;
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        for (const item of history) {
+            const media = item.movie || item.show;
+            const mediaId = media.ids.imdb || media.ids.tmdb;
+            const mediaType = item.movie ? 'movie' : 'show';
+            const watchedAt = item.last_watched_at;
+            const title = media.title;
+
+            const historyResult = await client.query(
+                `SELECT id FROM trakt_history WHERE username = $1 AND imdb_id = $2`,
+                [username, media.ids.imdb]
+            );
+
+            if (historyResult.rows.length > 0) {
+                await client.query(
+                    `UPDATE trakt_history
+                     SET watched_at = $1, title = $2, tmdb_id = $3, type = $4
+                     WHERE id = $5`,
+                    [watchedAt, title, media.ids.tmdb, mediaType, historyResult.rows[0].id]
+                );
+            } else {
+                await client.query(
+                    `INSERT INTO trakt_history (username, imdb_id, tmdb_id, type, watched_at, title)
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [username, media.ids.imdb, media.ids.tmdb, mediaType, watchedAt, title]
+                );
+            }
         }
-  
-        traktDb.serialize(() => {
-            traktDb.run('BEGIN TRANSACTION');
-            
-            history.forEach(item => {
-                const media = item.movie || item.show;
-                const mediaId = media.ids.imdb || media.ids.tmdb;
-                const mediaType = item.movie ? 'movie' : 'show';
-                const watchedAt = item.last_watched_at;
-                const title = media.title;
-  
-                traktDb.get(`
-                    SELECT id FROM trakt_history WHERE username = ? AND imdb_id = ?
-                `, [username, media.ids.imdb], (err, row) => {
-                    if (err) {
-                        log.error(`Error querying trakt_history for ${mediaType} (ID: ${mediaId}): ${err.message}`);
-                        traktDb.run('ROLLBACK');
-                        return reject(err);
-                    }
-  
-                    if (row) {
-                        traktDb.run(`
-                            UPDATE trakt_history
-                            SET watched_at = ?, title = ?, tmdb_id = ?, type = ?
-                            WHERE id = ?
-                        `, [watchedAt, title, media.ids.tmdb, mediaType, row.id], (err) => {
-                            if (err) {
-                                log.error(`Error updating trakt_history for ${mediaType} (ID: ${mediaId}): ${err.message}`);
-                                traktDb.run('ROLLBACK');
-                                return reject(err);
-                            }
-                        });
-                    } else {
-                        traktDb.run(`
-                            INSERT INTO trakt_history (username, imdb_id, tmdb_id, type, watched_at, title)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        `, [username, media.ids.imdb, media.ids.tmdb, mediaType, watchedAt, title], (err) => {
-                            if (err) {
-                                log.error(`Error inserting trakt_history for ${mediaType} (ID: ${mediaId}): ${err.message}`);
-                                traktDb.run('ROLLBACK');
-                                return reject(err);
-                            }
-                        });
-                    }
-                });
-            });
-  
-            traktDb.run('COMMIT', (err) => {
-                if (err) {
-                    log.error(`Error committing transaction for user ${username}: ${err.message}`);
-                    return reject(err);
-                }
-                resolve();
-            });
-        });
-    });
-  };
+
+        await client.query('COMMIT');
+        log.info(`History saved for user ${username}`);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        log.error(`Error committing transaction for user ${username}: ${err.message}`);
+        throw err;
+    } finally {
+        client.release();
+    }
+};
 
 const fetchUserProfile = async (accessToken) => {
     const endpoint = '/users/me';

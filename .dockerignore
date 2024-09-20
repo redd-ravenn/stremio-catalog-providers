@@ -1,7 +1,6 @@
-.git
-db
 log
 node_modules
+.git
 .dockerignore
 .env
 .gitattributes

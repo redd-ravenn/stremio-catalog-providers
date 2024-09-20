@@ -1,52 +1,50 @@
 const { fetchUserHistory } = require('../api/trakt');
-const { traktDb } = require('./db');
+const { pool } = require('./db');
 const log = require('./logger');
 
-const saveUserTokens = (username, accessToken, refreshToken) => {
-    return new Promise((resolve, reject) => {
-        traktDb.run(
+const saveUserTokens = async (username, accessToken, refreshToken) => {
+    try {
+        await pool.query(
             `INSERT INTO trakt_tokens (username, access_token, refresh_token) 
-            VALUES (?, ?, ?) ON CONFLICT(username) DO UPDATE SET access_token = ?, refresh_token = ?`,
-            [username, accessToken, refreshToken, accessToken, refreshToken],
-            (err) => {
-                if (err) {
-                    log.error(`Error saving tokens for user ${username}: ${err.message}`);
-                    return reject(err);
-                }
-                resolve();
-            }
+            VALUES ($1, $2, $3) 
+            ON CONFLICT (username) DO UPDATE SET access_token = $2, refresh_token = $3`,
+            [username, accessToken, refreshToken]
         );
-    });
+        log.info(`Tokens saved for user ${username}`);
+    } catch (err) {
+        log.error(`Error saving tokens for user ${username}: ${err.message}`);
+        throw err;
+    }
 };
 
-const fetchUserTokens = (username) => {
-    return new Promise((resolve, reject) => {
-        traktDb.get(
-            `SELECT access_token, refresh_token FROM trakt_tokens WHERE username = ?`,
-            [username],
-            (err, row) => {
-                if (err) {
-                    log.error(`Error fetching tokens for user ${username}: ${err.message}`);
-                    return reject(err);
-                }
-                if (!row) {
-                    log.warn(`No tokens found for user ${username}`);
-                    return reject(new Error(`No tokens found for user ${username}`));
-                }
-                resolve({
-                    access_token: row.access_token,
-                    refresh_token: row.refresh_token,
-                });
-            }
+const fetchUserTokens = async (username) => {
+    try {
+        const result = await pool.query(
+            `SELECT access_token, refresh_token FROM trakt_tokens WHERE username = $1`,
+            [username]
         );
-    });
+        const row = result.rows[0];
+
+        if (!row) {
+            log.warn(`No tokens found for user ${username}`);
+            throw new Error(`No tokens found for user ${username}`);
+        }
+
+        return {
+            access_token: row.access_token,
+            refresh_token: row.refresh_token,
+        };
+    } catch (err) {
+        log.error(`Error fetching tokens for user ${username}: ${err.message}`);
+        throw err;
+    }
 };
 
-const fetchUserWatchedMovies = (username, accessToken) => {
+const fetchUserWatchedMovies = async (username, accessToken) => {
     return fetchUserHistory(username, 'movies', accessToken);
 };
 
-const fetchUserWatchedShows = (username, accessToken) => {
+const fetchUserWatchedShows = async (username, accessToken) => {
     return fetchUserHistory(username, 'shows', accessToken);
 };
 

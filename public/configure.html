@@ -759,7 +759,7 @@
         <img src="/assets/logo.png" alt="Addon Logo" />
       </div>
       <h1 class="name">Streaming Catalog Providers</h1>
-      <h2 class="version">0.5.0</h2>
+      <h2 class="version">1.0.0</h2>
       <h2 class="description">Catalog from TMDB streaming providers</h2>
     
       <div id="interface1">
@@ -773,26 +773,21 @@
       <div id="interface2" style="display: none;">
         <div class="separator"></div>
         <h3 class="providers-title">Available providers</h3>
-                <div class="form-element">
-                  <label for="countrySelect">Select your country</label>
-                  <select id="countrySelect" name="countrySelect">
-                  </select>
-                </div>
+        <div class="form-element">
+          <label for="regionSelect">Catalog regions</label>
+          <div class="custom-select-container" id="regionSelectContainer">
+            <div class="tags-input" id="tagsInput">
+              <input type="text" id="regionSearchInput" placeholder="Type or select a region..." />
+            </div>
+            <div id="regionDropdown" class="custom-dropdown"></div>
+          </div>
+        </div>
         <div class="form-element">
           <input type="text" id="searchProviders" placeholder="Search providers..." />
         </div>
         <div id="providers" class="provider-container"></div>
         <div class="separator"></div>
         <form class="pure-form" id="mainForm">
-          <div class="form-element">
-            <label for="regionSelect">Catalog regions</label>
-            <div class="custom-select-container" id="regionSelectContainer">
-              <div class="tags-input" id="tagsInput">
-                <input type="text" id="regionSearchInput" placeholder="Type or select a region..." />
-              </div>
-              <div id="regionDropdown" class="custom-dropdown"></div>
-            </div>
-          </div>
           <div class="form-element">
             <label for="language"> Language </label>
             <select id="language" name="language" required>
@@ -1104,40 +1099,6 @@
             });
           };
         
-          const populateCountryDropdown = () => {
-            const countrySelect = document.getElementById('countrySelect');
-            const allOption = document.createElement('option');
-            allOption.value = 'ALL';
-            allOption.textContent = '🌍 Everywhere';
-            allOption.selected = true;
-            countrySelect.appendChild(allOption);
-        
-            const sortedCountries = countries.sort((a, b) => a.english_name.localeCompare(b.english_name));
-            sortedCountries.forEach(country => {
-              const option = document.createElement('option');
-              option.value = country.iso_3166_1;
-        
-              const flag = country.iso_3166_1
-                .toUpperCase()
-                .replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
-              option.textContent = `${flag} ${country.english_name}`;
-              countrySelect.appendChild(option);
-            });
-          };
-        
-          populateCountryDropdown();
-          document.getElementById('countrySelect').addEventListener('change', function() {
-            const selectedCountry = this.value;
-            renderProviders(selectedCountry);
-        
-            const searchTerm = document.getElementById('searchProviders').value.toLowerCase();
-            document.querySelectorAll('#providers .provider').forEach(providerElement => {
-              const providerId = providerElement.getAttribute('data-id');
-              const providerName = providersMap[providerId].provider_name.toLowerCase();
-              providerElement.style.display = providerName.includes(searchTerm) ? 'flex' : 'none';
-            });
-          });
-        
           const fetchProviders = async (apiKey) => {
             try {
               const response = await fetch('/fetch-providers', {
@@ -1160,34 +1121,25 @@
               return [];
             }
           };
-        
-          const renderProviders = (countryCode) => {
-            let filteredProviders;
-        
-            if (countryCode === 'ALL') {
-              filteredProviders = providersData;
-            } else {
-              filteredProviders = providersData.filter(provider => {
-                const displayPriorities = JSON.parse(provider.display_priorities || '{}');
-                return displayPriorities[countryCode] !== undefined;
-              });
+         
+          const renderProviders = () => {
+            if (selectedRegions.length === 0) {
+              providersContainer.innerHTML = '';
+              return;
             }
-        
-            filteredProviders = filteredProviders.filter(provider => {
-              const isSelected = selectedProviders.includes(provider.provider_id.toString());
-              return !isSelected;
+
+            let filteredProviders = providersData.filter(provider => {
+              const displayPriorities = JSON.parse(provider.display_priorities || '{}');
+              return selectedRegions.some(regionCode => displayPriorities[regionCode] !== undefined);
             });
-        
-            filteredProviders.forEach(provider => {
-              providersMap[provider.provider_id] = provider;
-            });
-        
+
             filteredProviders.sort((a, b) => a.provider_name.localeCompare(b.provider_name));
             providersContainer.innerHTML = filteredProviders.map(provider => `
               <div class="provider" data-id="${provider.provider_id}">
                 <img src="https://image.tmdb.org/t/p/w500/${provider.logo_path}" alt="${provider.provider_name}" title="${provider.provider_name}" />
-              </div>`).join('');
-        
+              </div>
+            `).join('');
+
             document.querySelectorAll('.provider').forEach(provider => {
               provider.addEventListener('click', () => {
                 const providerId = provider.getAttribute('data-id');
@@ -1220,7 +1172,6 @@
           interface1.style.display = 'none';
           interface2.style.display = 'block';
           });
-
         
           const showInfoModal = () => {
             infoModal.style.display = 'block';
@@ -1273,30 +1224,34 @@
           });
         
           const addSelectedRegion = (regionCode, flag, countryName) => {
-          if (!selectedRegions.includes(regionCode)) {
-            selectedRegions.push(regionCode);
-          }
+            if (!selectedRegions.includes(regionCode)) {
+              selectedRegions.push(regionCode);
+            }
 
-          if (!document.querySelector(`.tag[data-id='${regionCode}']`)) {
-            const tag = document.createElement('span');
-            tag.className = 'tag';
-            tag.setAttribute('data-id', regionCode);
-            tag.innerHTML = `
-              <span class="flag">${flag}</span>
-              <span class="country-name">${countryName}</span>
-            `;
-            tag.addEventListener('click', () => {
-              removeSelectedRegion(regionCode);
-            });
-            document.getElementById('regionSearchInput').parentNode.insertBefore(tag, document.getElementById('regionSearchInput'));
-          }
-        };
-        
+            if (!document.querySelector(`.tag[data-id='${regionCode}']`)) {
+              const tag = document.createElement('span');
+              tag.className = 'tag';
+              tag.setAttribute('data-id', regionCode);
+              tag.innerHTML = `
+                <span class="flag">${flag}</span>
+                <span class="country-name">${countryName}</span>
+              `;
+              tag.addEventListener('click', () => {
+                removeSelectedRegion(regionCode);
+              });
+              document.getElementById('regionSearchInput').parentNode.insertBefore(tag, document.getElementById('regionSearchInput'));
+            }
+
+            renderProviders();
+          };
+
           const removeSelectedRegion = (regionCode) => {
             selectedRegions = selectedRegions.filter(code => code !== regionCode);
             document.querySelector(`.tag[data-id='${regionCode}']`).remove();
+
+            renderProviders();
           };
-        
+
           populateRegionDropdown();
         
           document.getElementById('regionSearchInput').addEventListener('focus', function () {

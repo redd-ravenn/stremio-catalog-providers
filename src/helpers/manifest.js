@@ -1,10 +1,10 @@
-const { genresDb, providersDb } = require('./db');
+const { pool } = require('./db');
 const log = require('../helpers/logger');
 const { checkGenresExistForLanguage, fetchAndStoreGenres } = require('../api/tmdb');
 
 const manifestTemplate = {
     id: 'community.tmdbstreamingcatalogproviders',
-    version: '0.5.0',
+    version: '1.0.0',
     name: 'TMDB Streaming Catalog Providers',
     description: 'Catalog from TMDB streaming providers.',
     resources: ['catalog'],
@@ -17,28 +17,27 @@ const manifestTemplate = {
     }
 };
 
-const getProvider = (providerId) => {
-    return new Promise((resolve, reject) => {
-        providersDb.get("SELECT * FROM providers WHERE provider_id = ?", [providerId], (err, row) => {
-            if (err) {
-                reject(err);
-            } else if (row) {
-                resolve(row);
-            } else {
-                resolve(null);
-            }
-        });
-    });
+const getProvider = async (providerId) => {
+    try {
+        const result = await pool.query("SELECT * FROM providers WHERE provider_id = $1", [providerId]);
+        const row = result.rows[0];
+        return row || null;
+    } catch (err) {
+        throw err;
+    }
 };
 
-const getGenres = (type, language) => 
-    new Promise((resolve, reject) => {
-        const query = `SELECT genre_name FROM genres WHERE media_type = ? AND language = ?`;
-        genresDb.all(query, [type, language], (err, rows) => {
-            if (err) return reject(err);
-            resolve(rows.map(row => row.genre_name));
-        });
-    });
+const getGenres = async (type, language) => {
+    try {
+        const result = await pool.query(
+            "SELECT genre_name FROM genres WHERE media_type = $1 AND language = $2", 
+            [type, language]
+        );
+        return result.rows.map(row => row.genre_name);
+    } catch (err) {
+        throw err;
+    }
+};
 
 const getCurrentYear = () => new Date().getFullYear();
 

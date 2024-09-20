@@ -2,12 +2,16 @@ const express = require('express');
 const log = require('../helpers/logger');
 const { parseConfigParameters, extractCatalogInfo, getGenreId, fetchDiscoverContent, buildMetas } = require('../helpers/catalog');
 const { handleTraktHistory } = require('../api/trakt');
+
 const router = express.Router();
 
 router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res, next) => {
     const { id, configParameters, type, extra: extraParam } = req.params;
     const extra = extraParam ? decodeURIComponent(extraParam) : '';
     let skip = 0;
+
+    const origin = req.get('origin');
+    log.debug(`Request Origin: ${origin}`);
 
     log.debug(`Received parameters: id=${id}, type=${type}, configParameters=${configParameters}, extra=${extra}`);
 
@@ -60,8 +64,8 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
         if (parsedConfig.hideTraktHistory === 'true' && parsedConfig.traktUsername) {
             filteredResults = await handleTraktHistory(parsedConfig, filteredResults);
         }
-        
-        const metas = await buildMetas(filteredResults, catalogType, parsedConfig.language, parsedConfig.rpdbApiKey, parsedConfig.addWatchedTraktBtn, parsedConfig.hideTraktHistory, parsedConfig.traktUsername);
+
+        const metas = await buildMetas(filteredResults, catalogType, parsedConfig.language, parsedConfig.rpdbApiKey, parsedConfig.addWatchedTraktBtn, parsedConfig.hideTraktHistory, parsedConfig.traktUsername, origin);
 
         res.json({ metas });
     } catch (error) {

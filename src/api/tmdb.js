@@ -1,18 +1,16 @@
 const axios = require('axios');
+const { safeRedisCall } = require('../helpers/redis');
 const log = require('../helpers/logger');
 const addToQueueTMDB = require('../helpers/bottleneck_tmdb');
-const { genresDb, catalogDb } = require('../helpers/db');
-const { getCache, setCache } = require('../helpers/cache');
+const { pool } = require('../helpers/db');
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 const PREFETCH_PAGE_COUNT = process.env.PREFETCH_PAGE_COUNT ? parseInt(process.env.PREFETCH_PAGE_COUNT, 10) : 5;
+const CACHE_CATALOG_CONTENT_DURATION_DAYS = process.env.CACHE_CATALOG_CONTENT_DURATION_DAYS ? parseInt(process.env.CACHE_CATALOG_CONTENT_DURATION_DAYS, 10) : 1;
+const CACHE_DURATION_SECONDS = CACHE_CATALOG_CONTENT_DURATION_DAYS * 86400;
 
-const makeRequest = (url, tmdbApiKey = null) => {
-    if (tmdbApiKey) {
-        url = `${url}${url.includes('?') ? '&' : '?'}api_key=${tmdbApiKey}`;
-    }
-
+const makeRequest = (url) => {
     return new Promise((resolve, reject) => {
         addToQueueTMDB({
             fn: () => axios.get(url)
@@ -28,140 +26,137 @@ const makeRequest = (url, tmdbApiKey = null) => {
     });
 };
 
-const determinePageFromSkip = async (providerId, skip, catalogDb, type, sortBy, ageRange) => {
+const determinePageFromSkip = async (providerId, skip, type, sortBy, ageRange, rating = null, genre = null, year = null, watchRegion = 'no-region') => {
     try {
-        if (skip === 0) {
-            log.debug('Skip is 0, returning page 1');
+        if (skip === 0 || skip === null || skip === '') {
+            log.debug('Skip is 0 or null, returning page 1');
             return 1;
         }
 
-        const cachedEntry = await new Promise((resolve, reject) => {
-            catalogDb.get(
-                "SELECT page, skip FROM cache WHERE provider_id = ? AND skip >= ? AND type = ? AND sortBy = ? AND ageRange = ? ORDER BY skip ASC LIMIT 1",
-                [providerId, skip, type, sortBy, ageRange],
-                (err, row) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(row);
-                    }
-                }
-            );
-        });
+        const keyPattern = `tmdb:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:page:*:skip:*`;
 
-        if (cachedEntry) {
-            log.debug(`Cached Entry: Page ${cachedEntry.page}, Skip ${cachedEntry.skip}`);
-            return cachedEntry.page;
+        const keys = await safeRedisCall('keys', keyPattern);
+
+        if (keys && keys.length > 0) {
+            const filteredKeys = keys.filter(key => {
+                const skipMatch = key.match(/skip:(\d+)/);
+                return skipMatch && parseInt(skipMatch[1], 10) <= skip;
+            });
+
+            if (filteredKeys.length > 0) {
+                filteredKeys.sort((a, b) => {
+                    const skipA = parseInt(a.match(/skip:(\d+)/)[1], 10);
+                    const skipB = parseInt(b.match(/skip:(\d+)/)[1], 10);
+                    return skipB - skipA;
+                });
+
+                const bestMatchKey = filteredKeys[0];
+                const cachedEntry = await safeRedisCall('get', bestMatchKey);
+
+                if (cachedEntry) {
+                    const parsedEntry = JSON.parse(cachedEntry);
+                    log.debug(`Cached Entry: Page ${parsedEntry.page}, Skip ${parsedEntry.skip}`);
+                    return parsedEntry.page + 1;
+                }
+            }
         }
 
-        const lastEntry = await new Promise((resolve, reject) => {
-            catalogDb.get(
-                "SELECT page, skip FROM cache WHERE provider_id = ? AND type = ? AND sortBy = ? AND ageRange = ? ORDER BY skip DESC LIMIT 1",
-                [providerId, type, sortBy, ageRange],
-                (err, row) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(row);
-                    }
-                }
-            );
-        });
-
-        log.debug(`Last Entry in Cache: ${lastEntry ? `Page ${lastEntry.page}, Skip ${lastEntry.skip}` : 'None'}`);
-
-        if (lastEntry) {
-            log.debug(`Returning the next page: ${lastEntry.page + 1}`);
-            return lastEntry.page + 1;
-        }
-
-        log.debug('Default to Page 1');
+        log.debug(`No cached entry found for skip=${skip}, returning default page`);
         return 1;
+
     } catch (error) {
         log.error('Error in determinePageFromSkip:', error);
         return 1;
     }
 };
 
-
-const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = null, ageRange = null) => {
+const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = null, ageRange = null, rating = null, genre = null, year = null) => {
     if (tmdbApiKey) {
         params.api_key = tmdbApiKey;
     }
 
-    const { skip, type, sort_by: sortBy, ...queryParams } = params;
+    const { skip, type, sort_by: sortBy, watch_region: watchRegion = 'no-region' } = params;
 
-    const page = providerId ? await determinePageFromSkip(providerId, skip, catalogDb, type, sortBy, ageRange) : 1;
+    const page = providerId ? await determinePageFromSkip(providerId, skip, type, sortBy, ageRange, rating, genre, year, watchRegion) : 1;
 
+    const { skip: _skip, type: _type, ...queryParamsWithoutSkipAndType } = params;
     const queryParamsWithPage = {
-        ...queryParams,
+        ...queryParamsWithoutSkipAndType,
         page,
-        language: params.language,
-        type,
     };
 
-    if (sortBy) {
-        queryParamsWithPage.sort_by = sortBy;
-    }
-
     const queryString = new URLSearchParams(queryParamsWithPage).toString();
-
     const url = `${TMDB_BASE_URL}${endpoint}?${queryString}`;
 
     log.debug(`Request URL: ${url}`);
 
-    const cachedData = await getCache(url, skip);
+    const cacheKey = `tmdb:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:page:${page}:skip:${skip}`;
+
+    const cachedData = await safeRedisCall('get', cacheKey);
+
     if (cachedData) {
-        return cachedData;
+        log.debug(`Redis cache hit for key: ${cacheKey}`);
+        return JSON.parse(cachedData);
     }
 
-    const data = await makeRequest(url, tmdbApiKey);
+    const data = await makeRequest(url);
 
     if (data.total_pages >= page) {
-        setCache(url, data, page, skip, providerId, type, sortBy, ageRange);
-        log.debug(`Data stored in cache for URL: ${url} with page: ${page}, skip: ${skip}, providerId: ${providerId}, type: ${type}, sort_by: ${sortBy}, ageRange: ${ageRange}`);
+        await safeRedisCall('setEx', cacheKey, CACHE_DURATION_SECONDS, JSON.stringify(data));
+        log.debug(`Data stored in Redis cache for key: ${cacheKey}`);
     } else {
         log.debug(`Skipping cache: Page ${page} exceeds total_pages ${data.total_pages}`);
     }
 
     if (data.total_pages > page) {
-        prefetchNextPages(endpoint, queryParamsWithPage, page, data.total_pages, tmdbApiKey, providerId, ageRange);
+        prefetchNextPages(endpoint, queryParamsWithPage, page, data.total_pages, providerId, ageRange, rating, genre, year, watchRegion);
     }
 
     return data;
 };
 
-const prefetchNextPages = async (endpoint, queryParamsWithPage, currentPage, totalPages, tmdbApiKey, providerId, ageRange) => {
+const prefetchNextPages = async (endpoint, queryParamsWithPage, currentPage, totalPages, providerId, ageRange, rating = 'all', genre = 'all', year = 'all', watchRegion = 'no-region') => {
     const prefetchPromises = [];
 
     for (let i = 1; i <= PREFETCH_PAGE_COUNT; i++) {
         const nextPage = currentPage + i;
+        const nextSkip = (nextPage - 1) * 20;
+
+        const cacheKey = `tmdb:${providerId}:${queryParamsWithPage.type}:${queryParamsWithPage.sort_by}:${ageRange}:${rating}:${genre}:${year}:${watchRegion}:page:${nextPage}:skip:${nextSkip}`;
+
+        const cachedData = await safeRedisCall('get', cacheKey);
+        if (cachedData) {
+            log.debug(`Prefetch skipped for URL: ${nextPage}, data already in cache`);
+        } else {
+            log.debug(`Preparing to prefetch page ${nextPage}`);
+            prefetchPromises.push(
+                (async () => {
+                    try {
+                        const nextQueryParamsWithPage = { ...queryParamsWithPage, page: nextPage };
+                        delete nextQueryParamsWithPage.skip;
+                        
+                        const nextQueryString = new URLSearchParams(nextQueryParamsWithPage).toString();
+                        const nextUrl = `${TMDB_BASE_URL}${endpoint}?${nextQueryString}`;
+
+                        const nextData = await makeRequest(nextUrl);
+                        await safeRedisCall('setEx', cacheKey, CACHE_DURATION_SECONDS, JSON.stringify(nextData));
+
+                        log.debug(`Prefetched and stored data for URL: ${nextUrl} with page: ${nextPage}`);
+                    } catch (error) {
+                        log.warn(`Error prefetching URL: ${nextUrl} - ${error.message}`);
+                    }
+                })()
+            );
+        }
 
         if (nextPage > totalPages) {
             log.debug(`Stopping prefetch: nextPage (${nextPage}) exceeds totalPages (${totalPages})`);
             break;
         }
-
-        const nextQueryParamsWithPage = { ...queryParamsWithPage, page: nextPage };
-        const nextQueryString = new URLSearchParams(nextQueryParamsWithPage).toString();
-        const nextUrl = `${TMDB_BASE_URL}${endpoint}?${nextQueryString}`;
-
-        log.debug(`Preparing to prefetch URL: ${nextUrl}`);
-
-        prefetchPromises.push(
-            (async () => {
-                try {
-                    const nextData = await makeRequest(nextUrl, tmdbApiKey);
-                    setCache(nextUrl, nextData, nextPage, (nextPage - 1) * 20, providerId, queryParamsWithPage.type, queryParamsWithPage.sort_by, ageRange);
-                    log.debug(`Prefetched and stored data for URL: ${nextUrl} with page: ${nextPage}`);
-                } catch (error) {
-                    log.warn(`Error prefetching URL: ${nextUrl} - ${error.message}`);
-                }
-            })()
-        );
     }
 
-    Promise.all(prefetchPromises).then(() => log.debug(`Finished prefetching pages after ${currentPage}`));
+    await Promise.all(prefetchPromises);
+    log.debug(`Finished prefetching pages after page ${currentPage}`);
 };
 
 const discoverContent = async (type, watchProviders = [], ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language, skip = 0, regions = [], year = null, rating = null) => { 
@@ -259,25 +254,28 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
     }
 
     const fetchForRegion = async (region) => {
+        const clonedParams = { ...params };
+    
         if (region) {
-            params.watch_region = region;
+            clonedParams.watch_region = region;
         } else {
-            delete params.watch_region;
+            delete clonedParams.watch_region;
         }
-
-        return await fetchData(endpoint, params, tmdbApiKey, providerId, ageRange);
+    
+        return await fetchData(endpoint, clonedParams, tmdbApiKey, providerId, ageRange, rating, genre, year);
     };
-
+    
     const results = await Promise.all(regions.map(region => fetchForRegion(region)));
-
+    
     const combinedResults = results.reduce((acc, result) => acc.concat(result.results), []);
-
+    
     const uniqueResults = Array.from(new Map(combinedResults.map(item => [item.id, item])).values());
-
+    
     return {
         ...results[0],
         results: uniqueResults
     };
+    
 };
 
 const fetchGenres = async (type, language, tmdbApiKey) => {
@@ -299,45 +297,45 @@ const fetchGenres = async (type, language, tmdbApiKey) => {
     }
 };
 
-const storeGenresInDb = (genres, mediaType, language) => 
-    new Promise((resolve, reject) => {
-        genresDb.serialize(() => {
-            genresDb.run('BEGIN TRANSACTION');
-            const insertGenre = genresDb.prepare(`
-                INSERT INTO genres (genre_id, genre_name, media_type, language)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT DO NOTHING;
-            `);
+const storeGenresInDb = async (genres, mediaType, language) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
 
-            genres.forEach((genre, index) => {
-                insertGenre.run(genre.id, genre.name, mediaType, language, (err) => {
-                    if (err) {
-                        log.error(`Error inserting genre: ${err.message}`);
-                        genresDb.run('ROLLBACK');
-                        reject(err);
-                        return;
-                    }
+        const insertGenreText = `
+            INSERT INTO genres (genre_id, genre_name, media_type, language)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT DO NOTHING
+        `;
+        
+        for (const genre of genres) {
+            await client.query(insertGenreText, [genre.id, genre.name, mediaType, language]);
+        }
 
-                    if (index === genres.length - 1) {
-                        insertGenre.finalize();
-                        genresDb.run('COMMIT');
-                        log.info(`Genres stored for ${mediaType} (${language})`);
-                        resolve();
-                    }
-                });
-            });
-        });
-    });
+        await client.query('COMMIT');
+        log.info(`Genres stored for ${mediaType} (${language})`);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        log.error(`Error inserting genre: ${err.message}`);
+        throw err;
+    } finally {
+        client.release();
+    }
+};
 
-const checkGenresExistForLanguage = async (language) => 
-    new Promise((resolve, reject) => {
-        log.debug(`Checking genres for ${language}`);
-        genresDb.get(
-            `SELECT 1 FROM genres WHERE language = ? LIMIT 1`,
-            [language], 
-            (err, row) => err ? reject(err) : resolve(!!row)
-        );
-    });
+    const checkGenresExistForLanguage = async (language) => {
+        try {
+            log.debug(`Checking genres for ${language}`);
+            const result = await pool.query(
+                `SELECT 1 FROM genres WHERE language = $1 LIMIT 1`,
+                [language]
+            );
+            return result.rows.length > 0;
+        } catch (err) {
+            log.error(`Error checking genres: ${err.message}`);
+            throw err;
+        }
+    };
 
 const fetchAndStoreGenres = async (language, tmdbApiKey) => {
     try {
