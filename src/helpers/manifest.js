@@ -2,10 +2,13 @@ const { pool } = require('./db');
 const log = require('../helpers/logger');
 const { checkGenresExistForLanguage, fetchAndStoreGenres } = require('../api/tmdb');
 
+const addonLogoUrl = `${process.env.BASE_URL}/assets/logo.png`;
+
 const manifestTemplate = {
-    id: 'community.tmdbstreamingcatalogproviders',
-    version: '1.0.0',
-    name: 'TMDB Streaming Catalog Providers',
+    id: 'community.streamingcatalogproviders',
+    version: '1.1.0',
+    logo: addonLogoUrl,
+    name: 'Streaming Catalog Providers',
     description: 'Catalog from TMDB streaming providers.',
     resources: ['catalog'],
     types: ['movie', 'series'],

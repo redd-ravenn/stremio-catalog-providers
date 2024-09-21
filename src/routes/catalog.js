@@ -65,7 +65,7 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
             filteredResults = await handleTraktHistory(parsedConfig, filteredResults);
         }
 
-        const metas = await buildMetas(filteredResults, catalogType, parsedConfig.language, parsedConfig.rpdbApiKey, parsedConfig.addWatchedTraktBtn, parsedConfig.hideTraktHistory, parsedConfig.traktUsername, origin);
+        const metas = await buildMetas(filteredResults, catalogType, parsedConfig.language, parsedConfig.rpdbApiKey, parsedConfig.fanartApiKey, parsedConfig.addWatchedTraktBtn, parsedConfig.hideTraktHistory, parsedConfig.traktUsername, origin);
 
         res.json({ metas });
     } catch (error) {

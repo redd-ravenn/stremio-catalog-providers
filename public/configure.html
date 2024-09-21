@@ -759,7 +759,7 @@
         <img src="/assets/logo.png" alt="Addon Logo" />
       </div>
       <h1 class="name">Streaming Catalog Providers</h1>
-      <h2 class="version">1.0.0</h2>
+      <h2 class="version">1.1.0</h2>
       <h2 class="description">Catalog from TMDB streaming providers</h2>
     
       <div id="interface1">
@@ -810,6 +810,11 @@
           <div class="form-element">
             <label for="rpdbApiKey">RPDB API key (<a href="https://ratingposterdb.com/api-key/" target="_blank" style="color: #007aff;">Get it here</a>) </label>
             <input type="text" id="rpdbApiKey" name="rpdbApiKey">
+          </div>
+          <div class="separator"></div>
+          <div class="form-element">
+            <label for="fanartApiKey">Fanart API key (<a href="https://fanart.tv/get-an-api-key" target="_blank" style="color: #007aff;">Get it here</a>) </label>
+            <input type="text" id="fanartApiKey" name="fanartApiKey">
           </div>
           <div class="separator"></div>
           <div class="form-element">
@@ -1711,6 +1716,7 @@
           const language = localStorage.getItem('language');
           const ageRange = localStorage.getItem('ageRange');
           const rpdbApiKey = localStorage.getItem('rpdbApiKey');
+          const fanartApiKey = localStorage.getItem('fanartApiKey');
           const savedProviders = localStorage.getItem('selectedProviders');
           const savedRegions = localStorage.getItem('selectedRegions');
           const filterContentWithoutPoster = localStorage.getItem('filterContentWithoutPoster');
@@ -1730,6 +1736,10 @@
 
           if (rpdbApiKey) {
             document.getElementById('rpdbApiKey').value = rpdbApiKey;
+          }
+
+          if (fanartApiKey) {
+            document.getElementById('fanartApiKey').value = fanartApiKey;
           }
 
           if (filterContentWithoutPoster === 'true') {
@@ -1767,6 +1777,7 @@
           localStorage.removeItem('language');
           localStorage.removeItem('ageRange');
           localStorage.removeItem('rpdbApiKey');
+          localStorage.removeItem('fanartApiKey');
           localStorage.removeItem('selectedProviders');
           localStorage.removeItem('selectedRegions');
           localStorage.removeItem('filterContentWithoutPoster');
@@ -1788,6 +1799,7 @@
                     localStorage.setItem('language', document.getElementById('language').value);
                     localStorage.setItem('ageRange', document.getElementById('ageRange').value);
                     localStorage.setItem('rpdbApiKey', document.getElementById('rpdbApiKey').value);
+                    localStorage.setItem('fanartApiKey', document.getElementById('fanartApiKey').value);
                     localStorage.setItem('selectedProviders', JSON.stringify(selectedProviders));
                     localStorage.setItem('selectedRegions', JSON.stringify(selectedRegions));
                     localStorage.setItem('filterContentWithoutPoster', document.getElementById('filterContentWithoutPoster').checked ? 'true' : 'false');

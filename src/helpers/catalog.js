@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { pool } = require('./db');
 const { discoverContent } = require('../api/tmdb');
+const { getFanartPoster } = require('../api/fanart');
 const { getCachedPoster, setCachedPoster } = require('../helpers/cache');
 const log = require('../helpers/logger');
 
@@ -79,7 +80,7 @@ async function getPosterUrl(content, catalogType, language, rpdbApiKey) {
     return posterUrl;
 }
 
-async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, addWatchedTraktBtn, hideTraktHistory, traktUsername, origin) {
+async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, fanartApiKey, addWatchedTraktBtn, hideTraktHistory, traktUsername, origin) {
     return await Promise.all(filteredResults.map(async (content) => {
         const posterUrl = await getPosterUrl(content, catalogType, language, rpdbApiKey);
 
@@ -94,6 +95,11 @@ async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, ad
         let links = null;
         let imdbRating = null;
         let genres = null;
+        let logo = null;
+                        
+        if (fanartApiKey) {
+            logo = await getFanartPoster(content.id, language, fanartApiKey);
+        }
 
         if (origin === 'https://web.stremio.com') {
             links = await buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername);
@@ -115,6 +121,7 @@ async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, ad
             type: catalogType === 'movies' ? 'movie' : 'series',
             name: catalogType === 'movies' ? content.title : content.name,
             poster: posterUrl,
+            logo: logo || null,
             background: `https://image.tmdb.org/t/p/w1280${content.backdrop_path}`,
             description: content.overview,
             releaseInfo: releaseInfo || null,

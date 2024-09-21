@@ -22,6 +22,8 @@
 
 - **RPDB integration**: A web service that provides movie and series posters along with ratings, enhancing the visual and informational aspects of the catalogs.
 
+- **Fanart integration**: Enhance the visual appeal of content by replacing titles with logos in the selected language or English by default, when available.
+
 - **Progressive scraping**: Prefetch upcoming content pages as you scroll to enhance loading times. Ensuring smooth and reliable performance.
 
 - **Customizable cache management**:
