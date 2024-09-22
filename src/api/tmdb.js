@@ -10,7 +10,11 @@ const PREFETCH_PAGE_COUNT = process.env.PREFETCH_PAGE_COUNT ? parseInt(process.e
 const CACHE_CATALOG_CONTENT_DURATION_DAYS = process.env.CACHE_CATALOG_CONTENT_DURATION_DAYS ? parseInt(process.env.CACHE_CATALOG_CONTENT_DURATION_DAYS, 10) : 1;
 const CACHE_DURATION_SECONDS = CACHE_CATALOG_CONTENT_DURATION_DAYS * 86400;
 
-const makeRequest = (url) => {
+const makeRequest = (url, tmdbApiKey = null) => {
+    if (tmdbApiKey) {
+        url = `${url}${url.includes('?') ? '&' : '?'}api_key=${tmdbApiKey}`;
+    }
+    
     return new Promise((resolve, reject) => {
         addToQueueTMDB({
             fn: () => axios.get(url)
