@@ -102,13 +102,15 @@ async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, fa
         }
 
         if (origin === 'https://web.stremio.com') {
-            links = await buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername);
+
+            links = await buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername, language);
         } else {
             imdbRating = content.vote_average ? content.vote_average.toFixed(1) : null;
-            
+
             genres = await Promise.all(
                 content.genre_ids.map(async (genreId) => {
-                    const genreName = await getGenreName(genreId, catalogType);
+
+                    const genreName = await getGenreName(genreId, catalogType, language);
                     return genreName;
                 })
             );
@@ -132,13 +134,13 @@ async function buildMetas(filteredResults, catalogType, language, rpdbApiKey, fa
     }));
 }
 
-async function buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername) {
+async function buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHistory, traktUsername, language) {
     const links = [];
 
     if (content.genre_ids) {
         for (const genreId of content.genre_ids) {
             try {
-                const genreName = await getGenreName(genreId, content.type);
+                const genreName = await getGenreName(genreId, content.type, language);
                 if (genreName) {
                     links.push({
                         name: genreName,
@@ -171,11 +173,11 @@ async function buildLinks(content, catalogType, addWatchedTraktBtn, hideTraktHis
     return links;
 }
 
-async function getGenreName(genreId, type) {
+async function getGenreName(genreId, type, language) {
     try {
         const result = await pool.query(
-            "SELECT genre_name FROM genres WHERE genre_id = $1 AND media_type = $2", 
-            [genreId, type === 'series' ? 'tv' : 'movie']
+            "SELECT genre_name FROM genres WHERE genre_id = $1 AND media_type = $2 AND language = $3", 
+            [genreId, type === 'series' ? 'tv' : 'movie', language]
         );
         const row = result.rows[0];
         return row ? row.genre_name : null;

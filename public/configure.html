@@ -759,8 +759,9 @@
         <img src="/assets/logo.png" alt="Addon Logo" />
       </div>
       <h1 class="name">Streaming Catalog Providers</h1>
-      <h2 class="version">1.1.1</h2>
+      <h2 class="version">1.1.2</h2>
       <h2 class="description">Catalog from TMDB streaming providers</h2>
+      <div id="popup" class="popup"></div>
     
       <div id="interface1">
         <div class="form-element">
@@ -843,7 +844,6 @@
           </div>
           <div class="separator"></div>
         </form>
-        <div id="popup" class="popup"></div>
         <div id="infoModal" class="modal">
           <span id="modalClose" class="modal-close">&times;</span>
           <h4>Age Range Content Moderation</h4>
@@ -1023,6 +1023,7 @@
     usernameDisplay.parentNode.appendChild(traktToggleContainer);
 
     const markAsWatchedContainer = document.createElement('div');
+    markAsWatchedContainer.id = 'markAsWatchedContainer';
     markAsWatchedContainer.style.display = 'none';
     markAsWatchedContainer.style.marginTop = '10px';
 
@@ -1163,7 +1164,7 @@
           confirmButton.addEventListener('click', async () => {
           const apiKey = document.getElementById('tmdbApiKey').value.trim();
           if (!apiKey) {
-            alert('Please enter your TMDB API key.');
+            showPopup('Please enter your TMDB API key.', 'error');
             return;
           }
 
@@ -1330,7 +1331,7 @@
             popup.style.display = 'block';
             setTimeout(() => {
               popup.style.display = 'none';
-            }, 8000);
+            }, 5000);
           };
         
           const validateForm = () => {
@@ -1345,7 +1346,7 @@
         
           copyButton.onclick = () => {
             if (!validateForm()) {
-              showPopup('Configuration incomplete: Please select at least one Catalog regions, your Language, an Age Range and choose at least one provider.', 'error');
+              showPopup('Please select at least one Catalog regions, your Language, an Age Range and choose at least one provider.', 'error');
               return;
             }
             const link = getHttpsLink();
@@ -1359,7 +1360,7 @@
         
           installButton.onclick = () => {
             if (!validateForm()) {
-              showPopup('Configuration incomplete: Please select at least one Catalog regions, your Language, an Age Range and choose at least one provider.', 'error');
+              showPopup('Please select at least one Catalog regions, your Language, an Age Range and choose at least one provider.', 'error');
               return;
             }
             const link = getStremioLink();
@@ -1691,97 +1692,181 @@
               });
             }
           });
+
           function getQueryParams() {
-          const url = new URL(window.location.href);
-          const path = url.pathname;
-          const decodedPath = decodeURIComponent(path);
-          const configMatch = decodedPath.match(/\{.*\}/);
-          if (configMatch) {
+            const url = new URL(window.location.href);
+
+            const path = url.pathname.split('/')[1];
+
+            if (!path || path.length < 10) {
+              console.log('No valid base64 encoded parameters found in the URL.');
+              return {};
+            }
+
             try {
-              const config = JSON.parse(configMatch[0]);
+              const decodedPath = atob(path);
+
+              const decodedURI = decodeURIComponent(escape(decodedPath));
+
+              const config = JSON.parse(decodedURI);
+
+              if (config.traktUsername && !url.searchParams.has('username')) {
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('username', config.traktUsername);
+                const newUrl = currentUrl.toString();
+
+                window.location.href = newUrl;
+
+                return {};
+              }
+
               return config;
             } catch (error) {
-              console.error('Error parsing configuration parameters:', error);
-              showPopup('Error parsing configuration parameters. Please check your input and try again.', 'error');
+              console.error('Error decoding or parsing configuration parameters:', error);
+              if (path) {
+                showPopup('Error decoding or parsing configuration parameters. Please check your input and try again.', 'error');
+              }
             }
-          }
-          return {};
+
+            return {};
           }
 
-          
           function prefillFormFromUrlParams() {
-          const params = getQueryParams();
+            const params = getQueryParams();
 
-          const tmdbApiKey = localStorage.getItem('tmdbApiKey');
-          const language = localStorage.getItem('language');
-          const ageRange = localStorage.getItem('ageRange');
-          const rpdbApiKey = localStorage.getItem('rpdbApiKey');
-          const fanartApiKey = localStorage.getItem('fanartApiKey');
-          const savedProviders = localStorage.getItem('selectedProviders');
-          const savedRegions = localStorage.getItem('selectedRegions');
-          const filterContentWithoutPoster = localStorage.getItem('filterContentWithoutPoster');
+            if (params.tmdbApiKey && !localStorage.getItem('tmdbApiKey')) {
+              localStorage.setItem('tmdbApiKey', params.tmdbApiKey);
+            }
+            if (params.language && !localStorage.getItem('language')) {
+              localStorage.setItem('language', params.language);
+            }
+            if (params.ageRange && !localStorage.getItem('ageRange')) {
+              localStorage.setItem('ageRange', params.ageRange);
+            }
+            if (params.rpdbApiKey && !localStorage.getItem('rpdbApiKey')) {
+              localStorage.setItem('rpdbApiKey', params.rpdbApiKey);
+            }
+            if (params.fanartApiKey && !localStorage.getItem('fanartApiKey')) {
+              localStorage.setItem('fanartApiKey', params.fanartApiKey);
+            }
+            if (params.providers && !localStorage.getItem('selectedProviders')) {
+              localStorage.setItem('selectedProviders', JSON.stringify(params.providers));
+            }
+            if (params.regions && !localStorage.getItem('selectedRegions')) {
+              localStorage.setItem('selectedRegions', JSON.stringify(params.regions));
+            }
+            if (params.filterContentWithoutPoster && !localStorage.getItem('filterContentWithoutPoster')) {
+              localStorage.setItem('filterContentWithoutPoster', params.filterContentWithoutPoster);
+            }
 
-          if (tmdbApiKey) {
-            document.getElementById('tmdbApiKey').value = tmdbApiKey;
-            confirmButton.click();
-          }
+            const tmdbApiKey = localStorage.getItem('tmdbApiKey');
+            const language = localStorage.getItem('language');
+            const ageRange = localStorage.getItem('ageRange');
+            const rpdbApiKey = localStorage.getItem('rpdbApiKey');
+            const fanartApiKey = localStorage.getItem('fanartApiKey');
+            const savedProviders = localStorage.getItem('selectedProviders');
+            const savedRegions = localStorage.getItem('selectedRegions');
+            const filterContentWithoutPoster = localStorage.getItem('filterContentWithoutPoster');
 
-          if (language) {
-            document.getElementById('language').value = language;
-          }
+            if (tmdbApiKey) {
+              document.getElementById('tmdbApiKey').value = tmdbApiKey;
+              confirmButton.click();
+            }
 
-          if (ageRange) {
-            document.getElementById('ageRange').value = ageRange;
-          }
+            if (language) {
+              document.getElementById('language').value = language;
+            }
 
-          if (rpdbApiKey) {
-            document.getElementById('rpdbApiKey').value = rpdbApiKey;
-          }
+            if (ageRange) {
+              document.getElementById('ageRange').value = ageRange;
+            }
 
-          if (fanartApiKey) {
-            document.getElementById('fanartApiKey').value = fanartApiKey;
-          }
+            if (rpdbApiKey) {
+              document.getElementById('rpdbApiKey').value = rpdbApiKey;
+            }
 
-          if (filterContentWithoutPoster === 'true') {
-            document.getElementById('filterContentWithoutPoster').checked = true;
-          } else if (filterContentWithoutPoster === 'false') {
-            document.getElementById('filterContentWithoutPoster').checked = false;
-          }
+            if (fanartApiKey) {
+              document.getElementById('fanartApiKey').value = fanartApiKey;
+            }
 
-          if (savedProviders) {
-            selectedProviders = JSON.parse(savedProviders);
+            if (filterContentWithoutPoster === 'true') {
+              document.getElementById('filterContentWithoutPoster').checked = true;
+            } else if (filterContentWithoutPoster === 'false') {
+              document.getElementById('filterContentWithoutPoster').checked = false;
+            }
 
-            if (providersData.length > 0) {
-              populateProvidersMap();
-              renderSelectedProviders();
-            } else {
-              confirmButton.addEventListener('providersLoaded', () => {
+            if (savedProviders) {
+              selectedProviders = JSON.parse(savedProviders);
+
+              if (providersData.length > 0) {
                 populateProvidersMap();
                 renderSelectedProviders();
-              }, { once: true });
-            }
-          }
-
-          if (savedRegions) {
-            selectedRegions = JSON.parse(savedRegions);
-            selectedRegions.forEach(regionCode => {
-              const country = countries.find(c => c.iso_3166_1 === regionCode);
-              if (country) {
-                const flag = country.iso_3166_1.toUpperCase().replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
-                addSelectedRegion(regionCode, flag, country.english_name);
+              } else {
+                confirmButton.addEventListener('providersLoaded', () => {
+                  populateProvidersMap();
+                  renderSelectedProviders();
+                }, { once: true });
               }
-            });
+            }
+
+            if (savedRegions) {
+              selectedRegions = JSON.parse(savedRegions);
+              selectedRegions.forEach(regionCode => {
+                const country = countries.find(c => c.iso_3166_1 === regionCode);
+                if (country) {
+                  const flag = country.iso_3166_1.toUpperCase().replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
+                  addSelectedRegion(regionCode, flag, country.english_name);
+                }
+              });
+            }
+
+            if (params.addWatchedButton === 'on') {
+              const addWatchedButtonToggle = document.getElementById('addWatchedButton');
+              if (addWatchedButtonToggle) {
+                  addWatchedButtonToggle.checked = true;
+
+                  const markAsWatchedContainer = document.getElementById('markAsWatchedContainer');
+                  if (markAsWatchedContainer) {
+                      markAsWatchedContainer.style.display = 'block';
+                  }
+              }
           }
 
-          localStorage.removeItem('tmdbApiKey');
-          localStorage.removeItem('language');
-          localStorage.removeItem('ageRange');
-          localStorage.removeItem('rpdbApiKey');
-          localStorage.removeItem('fanartApiKey');
-          localStorage.removeItem('selectedProviders');
-          localStorage.removeItem('selectedRegions');
-          localStorage.removeItem('filterContentWithoutPoster');
-        }
+            if (params.addWatchedTraktBtn) {
+              const markAsWatchedTextbox = document.getElementById('markAsWatchedTextbox');
+              if (markAsWatchedTextbox) {
+                markAsWatchedTextbox.value = params.addWatchedTraktBtn;
+              }
+            }
+
+            if (params.hideTraktHistory === 'true') {
+              const hideTraktHistoryToggle = document.getElementById('hideTraktHistory');
+              if (hideTraktHistoryToggle) {
+                  hideTraktHistoryToggle.checked = true;
+
+                  const additionalLabelContainer = document.querySelector('.additional-label');
+                  if (additionalLabelContainer) {
+                      additionalLabelContainer.style.display = 'flex';
+                      additionalLabelContainer.style.width = '100%';
+                  }
+
+                  const additionalLabel = document.querySelector('.additional-label label');
+                  if (additionalLabel) {
+                      const emoji = params.watchedEmoji || '✔️';
+                      additionalLabel.textContent = `Adds ${emoji} in front of their name`;
+                  }
+              }
+          }
+
+            localStorage.removeItem('tmdbApiKey');
+            localStorage.removeItem('language');
+            localStorage.removeItem('ageRange');
+            localStorage.removeItem('rpdbApiKey');
+            localStorage.removeItem('fanartApiKey');
+            localStorage.removeItem('selectedProviders');
+            localStorage.removeItem('selectedRegions');
+            localStorage.removeItem('filterContentWithoutPoster');
+          }
 
           const populateProvidersMap = () => {
             providersData.forEach(provider => {

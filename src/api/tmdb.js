@@ -30,14 +30,14 @@ const makeRequest = (url, tmdbApiKey = null) => {
     });
 };
 
-const determinePageFromSkip = async (providerId, skip, type, sortBy, ageRange, rating = null, genre = null, year = null, watchRegion = 'no-region') => {
+const determinePageFromSkip = async (providerId, skip, type, sortBy, ageRange, rating = null, genre = null, year = null, watchRegion = 'no-region', language = 'en') => {
     try {
         if (skip === 0 || skip === null || skip === '') {
             log.debug('Skip is 0 or null, returning page 1');
             return 1;
         }
 
-        const keyPattern = `tmdb:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:page:*:skip:*`;
+        const keyPattern = `tmdb:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:${language}:page:*:skip:*`;
 
         const keys = await safeRedisCall('keys', keyPattern);
 
@@ -74,14 +74,14 @@ const determinePageFromSkip = async (providerId, skip, type, sortBy, ageRange, r
     }
 };
 
-const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = null, ageRange = null, rating = null, genre = null, year = null) => {
+const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = null, ageRange = null, rating = null, genre = null, year = null, language = 'en') => {
     if (tmdbApiKey) {
         params.api_key = tmdbApiKey;
     }
 
     const { skip, type, sort_by: sortBy, watch_region: watchRegion = 'no-region' } = params;
 
-    const page = providerId ? await determinePageFromSkip(providerId, skip, type, sortBy, ageRange, rating, genre, year, watchRegion) : 1;
+    const page = providerId ? await determinePageFromSkip(providerId, skip, type, sortBy, ageRange, rating, genre, year, watchRegion, language) : 1;
 
     const { skip: _skip, type: _type, ...queryParamsWithoutSkipAndType } = params;
     const queryParamsWithPage = {
@@ -94,7 +94,7 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
 
     log.debug(`Request URL: ${url}`);
 
-    const cacheKey = `tmdb:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:page:${page}:skip:${skip}`;
+    const cacheKey = `tmdb:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:${language}:page:${page}:skip:${skip}`;
 
     const cachedData = await safeRedisCall('get', cacheKey);
 
@@ -113,20 +113,20 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
     }
 
     if (data.total_pages > page) {
-        prefetchNextPages(endpoint, queryParamsWithPage, page, data.total_pages, providerId, ageRange, rating, genre, year, watchRegion);
+        prefetchNextPages(endpoint, queryParamsWithPage, page, data.total_pages, providerId, ageRange, rating, genre, year, watchRegion, language);
     }
 
     return data;
 };
 
-const prefetchNextPages = async (endpoint, queryParamsWithPage, currentPage, totalPages, providerId, ageRange, rating = 'all', genre = 'all', year = 'all', watchRegion = 'no-region') => {
+const prefetchNextPages = async (endpoint, queryParamsWithPage, currentPage, totalPages, providerId, ageRange, rating = 'all', genre = 'all', year = 'all', watchRegion = 'no-region', language = 'en') => {
     const prefetchPromises = [];
 
     for (let i = 1; i <= PREFETCH_PAGE_COUNT; i++) {
         const nextPage = currentPage + i;
         const nextSkip = (nextPage - 1) * 20;
 
-        const cacheKey = `tmdb:${providerId}:${queryParamsWithPage.type}:${queryParamsWithPage.sort_by}:${ageRange}:${rating}:${genre}:${year}:${watchRegion}:page:${nextPage}:skip:${nextSkip}`;
+        const cacheKey = `tmdb:${providerId}:${queryParamsWithPage.type}:${queryParamsWithPage.sort_by}:${ageRange}:${rating}:${genre}:${year}:${watchRegion}:${language}:page:${nextPage}:skip:${nextSkip}`;
 
         const cachedData = await safeRedisCall('get', cacheKey);
         if (cachedData) {
@@ -163,7 +163,7 @@ const prefetchNextPages = async (endpoint, queryParamsWithPage, currentPage, tot
     log.debug(`Finished prefetching pages after page ${currentPage}`);
 };
 
-const discoverContent = async (type, watchProviders = [], ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language, skip = 0, regions = [], year = null, rating = null) => { 
+const discoverContent = async (type, watchProviders = [], ageRange = null, sortBy = 'popularity.desc', genre = null, tmdbApiKey = null, language = 'en', skip = 0, regions = [], year = null, rating = null) => { 
     const mediaType = type === 'series' ? 'tv' : 'movie';
     const endpoint = `/discover/${mediaType}`;
 
@@ -266,7 +266,7 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
             delete clonedParams.watch_region;
         }
     
-        return await fetchData(endpoint, clonedParams, tmdbApiKey, providerId, ageRange, rating, genre, year);
+        return await fetchData(endpoint, clonedParams, tmdbApiKey, providerId, ageRange, rating, genre, year, language);
     };
     
     const results = await Promise.all(regions.map(region => fetchForRegion(region)));
@@ -279,8 +279,8 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
         ...results[0],
         results: uniqueResults
     };
-    
 };
+
 
 const fetchGenres = async (type, language, tmdbApiKey) => {
     const mediaType = type === 'series' ? 'tv' : 'movie';
