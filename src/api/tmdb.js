@@ -37,7 +37,7 @@ const determinePageFromSkip = async (providerId, skip, type, sortBy, ageRange, r
             return 1;
         }
 
-        const keyPattern = `tmdb:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:${language}:page:*:skip:*`;
+        const keyPattern = `discover:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:${language}:page:*:skip:*`;
 
         const keys = await safeRedisCall('keys', keyPattern);
 
@@ -94,7 +94,7 @@ const fetchData = async (endpoint, params = {}, tmdbApiKey = null, providerId = 
 
     log.debug(`Request URL: ${url}`);
 
-    const cacheKey = `tmdb:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:${language}:page:${page}:skip:${skip}`;
+    const cacheKey = `discover:${providerId}:${type}:${sortBy}:${ageRange}:${rating || 'no-rating'}:${genre || 'no-genre'}:${year || 'no-year'}:${watchRegion}:${language}:page:${page}:skip:${skip}`;
 
     const cachedData = await safeRedisCall('get', cacheKey);
 
@@ -126,7 +126,7 @@ const prefetchNextPages = async (endpoint, queryParamsWithPage, currentPage, tot
         const nextPage = currentPage + i;
         const nextSkip = (nextPage - 1) * 20;
 
-        const cacheKey = `tmdb:${providerId}:${queryParamsWithPage.type}:${queryParamsWithPage.sort_by}:${ageRange}:${rating}:${genre}:${year}:${watchRegion}:${language}:page:${nextPage}:skip:${nextSkip}`;
+        const cacheKey = `discover:${providerId}:${queryParamsWithPage.type}:${queryParamsWithPage.sort_by}:${ageRange}:${rating}:${genre}:${year}:${watchRegion}:${language}:page:${nextPage}:skip:${nextSkip}`;
 
         const cachedData = await safeRedisCall('get', cacheKey);
         if (cachedData) {
@@ -281,6 +281,157 @@ const discoverContent = async (type, watchProviders = [], ageRange = null, sortB
     };
 };
 
+const getRecommendationsFromTmdb = async (tmdbId, type, apiKey, language) => {
+    try {
+        const tmdbType = type === 'series' ? 'tv' : type;
+        const cacheKey = `recommendations:${tmdbId}:${tmdbType}:${language}`;
+
+        const cachedData = await safeRedisCall('get', cacheKey);
+        if (cachedData) {
+            log.debug(`Redis cache hit for recommendations key: ${cacheKey}`);
+            return JSON.parse(cachedData);
+        }
+
+        const url = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/recommendations?language=${language}`;
+        const data = await makeRequest(url, apiKey);
+
+        if (data.results) {
+            await safeRedisCall('setEx', cacheKey, CACHE_DURATION_SECONDS, JSON.stringify(data.results));
+        }
+
+        return data.results;
+    } catch (error) {
+        if (error.response && error.response.status === 404) {
+            log.error(`TMDB ID ${tmdbId} not found or no recommendations available for type: ${tmdbType}`);
+            return [];
+        }
+        throw new Error(`Failed to fetch recommendations from TMDB: ${error.message}`);
+    }
+};
+
+const getSimilarContentFromTmdb = async (tmdbId, type, apiKey, language) => {
+    try {
+        const tmdbType = type === 'series' ? 'tv' : type;
+        const cacheKey = `similar:${tmdbId}:${tmdbType}:${language}`;
+
+        const cachedData = await safeRedisCall('get', cacheKey);
+        if (cachedData) {
+            log.debug(`Redis cache hit for similar content key: ${cacheKey}`);
+            return JSON.parse(cachedData);
+        }
+
+        const url = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/similar?language=${language}`;
+        const data = await makeRequest(url, apiKey);
+
+        if (data.results) {
+            await safeRedisCall('setEx', cacheKey, CACHE_DURATION_SECONDS, JSON.stringify(data.results));
+        }
+
+        return data.results;
+    } catch (error) {
+        if (error.response && error.response.status === 404) {
+            log.error(`TMDB ID ${tmdbId} not found or no similar content available for type: ${tmdbType}`);
+            return [];
+        }
+        throw new Error(`Failed to fetch similar content from TMDB: ${error.message}`);
+    }
+};
+
+const getContentFromImdbId = async (imdbId, apiKey, language) => {
+    const cleanedImdbId = imdbId.split(':')[0];
+    const cacheKey = `imdb:${cleanedImdbId}:${language}`;
+    
+    log.info(`Checking content from IMDb ID: ${cleanedImdbId}`);
+
+    const cachedData = await safeRedisCall('get', cacheKey);
+    if (cachedData) {
+        log.debug(`Redis cache hit for IMDb key: ${cacheKey}`);
+        return JSON.parse(cachedData);
+    }
+
+    const url = `https://api.themoviedb.org/3/find/${cleanedImdbId}?external_source=imdb_id&language=${language}`;
+    const data = await makeRequest(url, apiKey);
+
+    const content = data.movie_results?.[0] || data.tv_results?.[0];
+    if (content) {
+        const result = {
+            tmdbId: content.id,
+            title: content.title || content.name,
+            type: data.movie_results?.length ? 'movie' : 'tv'
+        };
+        await safeRedisCall('setEx', cacheKey, CACHE_DURATION_SECONDS, JSON.stringify(result));
+        return result;
+    }
+
+    return null;
+};
+
+const getContentDetails = async (tmdbId, type, apiKey, language) => {
+    const tmdbType = type === 'series' ? 'tv' : type;
+    const cacheKey = `details:${tmdbId}:${tmdbType}:${language}`;
+
+    log.debug(`Checking content details for TMDB ID: ${tmdbId}`);
+
+    const cachedData = await safeRedisCall('get', cacheKey);
+    if (cachedData) {
+        log.debug(`Redis cache hit for details key: ${cacheKey}`);
+        return JSON.parse(cachedData);
+    }
+
+    const url = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?language=${language}`;
+    const data = await makeRequest(url, apiKey);
+
+    if (data) {
+        await safeRedisCall('setEx', cacheKey, CACHE_DURATION_SECONDS, JSON.stringify(data));
+    }
+
+    return data;
+};
+
+const getContentDetailsById = async (item, type, apiKey, language) => {
+    try {
+        log.debug(`Fetching details for item ID: ${item.id}`);
+
+        const tmdbType = type === 'series' ? 'tv' : type;
+        
+        const details = await getContentDetails(item.id, tmdbType, apiKey, language);
+        return {
+            ...item,
+            title: details.title || details.name,
+            tagline: details.tagline || '',
+            rating: details.vote_average,
+            vote_count: details.vote_count,
+            released: details.release_date || details.first_air_date
+        };
+    } catch (error) {
+        log.error(`Error fetching details for item ID: ${item.id}`, error);
+        throw new Error('Failed to get content details');
+    }
+};
+
+const getImdbId = async (tmdbId, type, apiKey, language) => {
+    log.debug(`Checking IMDb ID for TMDB ID: ${tmdbId}`);
+
+    const tmdbType = type === 'series' ? 'tv' : type;
+    const cacheKey = `imdbId:${tmdbId}:${tmdbType}:${language}`;
+
+    const cachedData = await safeRedisCall('get', cacheKey);
+    if (cachedData) {
+        log.debug(`Redis cache hit for IMDb ID key: ${cacheKey}`);
+        return cachedData;
+    }
+
+    const url = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?language=${language}`;
+    const data = await makeRequest(url, apiKey);
+
+    const imdbId = data?.imdb_id || null;
+
+    if (imdbId) {
+        await safeRedisCall('setEx', cacheKey, CACHE_DURATION_SECONDS, imdbId);
+    }
+
+    return imdbId;
+};
 
 const fetchGenres = async (type, language, tmdbApiKey) => {
     const mediaType = type === 'series' ? 'tv' : 'movie';
@@ -355,4 +506,4 @@ const fetchAndStoreGenres = async (language, tmdbApiKey) => {
     }
 };
 
-module.exports = { makeRequest, fetchData, discoverContent, checkGenresExistForLanguage, fetchAndStoreGenres };
+module.exports = { makeRequest, fetchData, discoverContent, checkGenresExistForLanguage, fetchAndStoreGenres, getRecommendationsFromTmdb, getContentFromImdbId, getContentDetailsById, getImdbId, getSimilarContentFromTmdb };

@@ -4,6 +4,7 @@ const configureRoutes = require('./configure');
 const manifestRoutes = require('./manifest');
 const posterRoutes = require('./poster');
 const providersRoutes = require('./providers');
+const streamRoutes = require('./stream');
 const traktRoutes = require('./trakt');
 const log = require('../helpers/logger');
 
@@ -62,6 +63,7 @@ router.use(configureRoutes);
 router.use(manifestRoutes);
 router.use(posterRoutes);
 router.use(providersRoutes);
+router.use(streamRoutes);
 router.use(traktRoutes);
 
 router.use((err, req, res, next) => {

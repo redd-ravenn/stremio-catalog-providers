@@ -774,6 +774,57 @@
         align-items: center;
         box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.5);
       }
+/* Style pour les boutons radio "additionalContent" */
+.form-element .radio-group {
+  display: flex;
+  flex-direction: column; /* Aligne verticalement */
+  gap: 10px; /* Espace entre les labels */
+  margin-bottom: 20px;
+}
+
+.form-element .radio-group label {
+  display: inline-flex;
+  align-items: center;
+  color: #333;
+  cursor: pointer;
+  gap: 10px; /* Espace entre le texte du label et le bouton */
+}
+
+.form-element .radio-group label span {
+  flex-grow: 1; /* Permet d'occuper tout l'espace restant pour aligner les boutons à droite du plus long label */
+}
+
+.form-element .radio-group input[type="radio"] {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #ccc;
+  background-color: #fff;
+  cursor: pointer;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.form-element .radio-group input[type="radio"]:checked {
+  background-color: #007aff;
+  border-color: #007aff;
+}
+
+/* Mode sombre */
+body.dark-mode .radio-group input[type="radio"] {
+  border-color: #666;
+  background-color: #555;
+}
+
+body.dark-mode .radio-group input[type="radio"]:checked {
+  background-color: #4caf50;
+  border-color: #4caf50;
+}
+
+body.dark-mode .radio-group label {
+  color: #f0f0f5;
+}
+
     </style>
   </head>
 <html>
@@ -784,7 +835,7 @@
         <img src="/assets/logo.png" alt="Addon Logo" />
       </div>
       <h1 class="name">Streaming Catalog Providers</h1>
-      <h2 class="version">1.2.0</h2>
+      <h2 class="version">1.3.0</h2>
       <h2 class="description">Catalog from TMDB streaming providers</h2>
       <div id="popup" class="popup"></div>
     
@@ -851,6 +902,15 @@
           </div>
           <div class="separator"></div>
           <div class="form-element">
+            <label for="popularCatalogTitle">Popular catalog title</label>
+            <input type="text" id="popularCatalogTitle" name="popularCatalogTitle" placeholder="Replace 'Popular' in catalog title">
+          </div>
+          
+          <div class="form-element">
+            <label for="newCatalogTitle">New catalog title</label>
+            <input type="text" id="newCatalogTitle" name="newCatalogTitle" placeholder="Replace 'New' in catalog title">
+          </div>
+          <div class="form-element">
             <label for="filterContentWithoutPoster">
               Do not display content that does not have a poster (often bad results)
               <div class="toggle-switch">
@@ -858,7 +918,28 @@
                 <span class="slider"></span>
               </div>
             </label>
-          </div>          
+          </div>   
+          <div class="form-element">
+            <label for="recommendationsToggle">
+              Get recommendations related to the content on the content details page
+              <div class="toggle-switch">
+                <input type="checkbox" id="recommendationsToggle" name="recommendationsToggle">
+                <span class="slider"></span>
+              </div>
+            </label>
+            <input type="text" id="recommendationsText" placeholder="Replace 'Recommendations' in content page" style="display:none;" />
+          </div>
+          
+          <div class="form-element">
+            <label for="similarToggle">
+              Get similar content related to the content on the content details page
+              <div class="toggle-switch">
+                <input type="checkbox" id="similarToggle" name="similarToggle">
+                <span class="slider"></span>
+              </div>
+            </label>
+            <input type="text" id="similarText" placeholder="Replace 'Similar' in content page" style="display:none;" />
+          </div>
           <div class="separator"></div>
           <h3 class="selected-providers-title">Selected providers</h3>
           <div id="selectedProviders" class="provider-container"></div>
@@ -1335,11 +1416,28 @@
                 config.addWatchedTraktBtn = markAsWatchedTextbox ? markAsWatchedTextbox.value.trim() : '';
             }
 
+            const recommendationsToggle = document.getElementById('recommendationsToggle').checked;
+            const similarToggle = document.getElementById('similarToggle').checked;
+            const recommendationsText = document.getElementById('recommendationsText').value.trim() || 'Recommendations';
+            const similarText = document.getElementById('similarText').value.trim() || 'Similar';
+
+            if (recommendationsToggle && similarToggle) {
+                config.additionalContent = 'recommendations-similar';
+                config.recommendationsTitle = recommendationsText;
+                config.similarTitle = similarText;
+            } else if (recommendationsToggle) {
+                config.additionalContent = 'recommendations';
+                config.recommendationsTitle = recommendationsText;
+            } else if (similarToggle) {
+                config.additionalContent = 'similar';
+                config.similarTitle = similarText;
+            }
+
             const encodedConfig = encodeToBase64(JSON.stringify(config));
             return "stremio://" + window.location.host + "/" + encodedConfig + "/manifest.json";
-          };
+        };
 
-          const getHttpsLink = () => {
+        const getHttpsLink = () => {
             const config = Object.fromEntries(new FormData(mainForm));
             config.providers = selectedProviders;
             config.ageRange = document.getElementById('ageRange').value;
@@ -1360,9 +1458,26 @@
                 config.addWatchedTraktBtn = markAsWatchedTextbox ? markAsWatchedTextbox.value.trim() : '';
             }
 
+            const recommendationsToggle = document.getElementById('recommendationsToggle').checked;
+            const similarToggle = document.getElementById('similarToggle').checked;
+            const recommendationsText = document.getElementById('recommendationsText').value.trim() || 'Recommendations';
+            const similarText = document.getElementById('similarText').value.trim() || 'Similar';
+
+            if (recommendationsToggle && similarToggle) {
+                config.additionalContent = 'recommendations-similar';
+                config.recommendationsTitle = recommendationsText;
+                config.similarTitle = similarText;
+            } else if (recommendationsToggle) {
+                config.additionalContent = 'recommendations';
+                config.recommendationsTitle = recommendationsText;
+            } else if (similarToggle) {
+                config.additionalContent = 'similar';
+                config.similarTitle = similarText;
+            }
+
             const encodedConfig = encodeToBase64(JSON.stringify(config));
             return "https://" + window.location.host + "/" + encodedConfig + "/manifest.json";
-          };
+        };
 
           const showPopup = (message, type) => {
             popup.textContent = message;
@@ -1813,32 +1928,51 @@
             return {};
           }
 
-          function prefillFormFromUrlParams() {
+          function prefillFormFromUrlParams() { 
             const params = getQueryParams();
 
             if (params.tmdbApiKey && !localStorage.getItem('tmdbApiKey')) {
-              localStorage.setItem('tmdbApiKey', params.tmdbApiKey);
+                localStorage.setItem('tmdbApiKey', params.tmdbApiKey);
             }
             if (params.language && !localStorage.getItem('language')) {
-              localStorage.setItem('language', params.language);
+                localStorage.setItem('language', params.language);
             }
             if (params.ageRange && !localStorage.getItem('ageRange')) {
-              localStorage.setItem('ageRange', params.ageRange);
+                localStorage.setItem('ageRange', params.ageRange);
             }
             if (params.rpdbApiKey && !localStorage.getItem('rpdbApiKey')) {
-              localStorage.setItem('rpdbApiKey', params.rpdbApiKey);
+                localStorage.setItem('rpdbApiKey', params.rpdbApiKey);
             }
             if (params.fanartApiKey && !localStorage.getItem('fanartApiKey')) {
-              localStorage.setItem('fanartApiKey', params.fanartApiKey);
+                localStorage.setItem('fanartApiKey', params.fanartApiKey);
             }
             if (params.providers && !localStorage.getItem('selectedProviders')) {
-              localStorage.setItem('selectedProviders', JSON.stringify(params.providers));
+                localStorage.setItem('selectedProviders', JSON.stringify(params.providers));
             }
             if (params.regions && !localStorage.getItem('selectedRegions')) {
-              localStorage.setItem('selectedRegions', JSON.stringify(params.regions));
+                localStorage.setItem('selectedRegions', JSON.stringify(params.regions));
             }
             if (params.filterContentWithoutPoster && !localStorage.getItem('filterContentWithoutPoster')) {
-              localStorage.setItem('filterContentWithoutPoster', params.filterContentWithoutPoster);
+                localStorage.setItem('filterContentWithoutPoster', params.filterContentWithoutPoster);
+            }
+
+            if (params.popularCatalogTitle && !localStorage.getItem('popularCatalogTitle')) {
+                localStorage.setItem('popularCatalogTitle', params.popularCatalogTitle);
+            }
+            if (params.newCatalogTitle && !localStorage.getItem('newCatalogTitle')) {
+                localStorage.setItem('newCatalogTitle', params.newCatalogTitle);
+            }
+            if (params.recommendationsToggle && !localStorage.getItem('recommendationsToggle')) {
+                localStorage.setItem('recommendationsToggle', params.recommendationsToggle);
+            }
+            if (params.recommendationsText && !localStorage.getItem('recommendationsText')) {
+                localStorage.setItem('recommendationsText', params.recommendationsText);
+            }
+            if (params.similarToggle && !localStorage.getItem('similarToggle')) {
+                localStorage.setItem('similarToggle', params.similarToggle);
+            }
+            if (params.similarText && !localStorage.getItem('similarText')) {
+                localStorage.setItem('similarText', params.similarText);
             }
 
             const tmdbApiKey = localStorage.getItem('tmdbApiKey');
@@ -1849,96 +1983,97 @@
             const savedProviders = localStorage.getItem('selectedProviders');
             const savedRegions = localStorage.getItem('selectedRegions');
             const filterContentWithoutPoster = localStorage.getItem('filterContentWithoutPoster');
+            
+            const popularCatalogTitle = localStorage.getItem('popularCatalogTitle');
+            const newCatalogTitle = localStorage.getItem('newCatalogTitle');
+            const recommendationsToggle = localStorage.getItem('recommendationsToggle');
+            const recommendationsText = localStorage.getItem('recommendationsText');
+            const similarToggle = localStorage.getItem('similarToggle');
+            const similarText = localStorage.getItem('similarText');
 
             if (tmdbApiKey) {
-              document.getElementById('tmdbApiKey').value = tmdbApiKey;
-              confirmButton.click();
+                document.getElementById('tmdbApiKey').value = tmdbApiKey;
+                confirmButton.click();
             }
 
             if (language) {
-              document.getElementById('language').value = language;
+                document.getElementById('language').value = language;
             }
 
             if (ageRange) {
-              document.getElementById('ageRange').value = ageRange;
+                document.getElementById('ageRange').value = ageRange;
             }
 
             if (rpdbApiKey) {
-              document.getElementById('rpdbApiKey').value = rpdbApiKey;
+                document.getElementById('rpdbApiKey').value = rpdbApiKey;
             }
 
             if (fanartApiKey) {
-              document.getElementById('fanartApiKey').value = fanartApiKey;
+                document.getElementById('fanartApiKey').value = fanartApiKey;
             }
 
             if (filterContentWithoutPoster === 'true') {
-              document.getElementById('filterContentWithoutPoster').checked = true;
+                document.getElementById('filterContentWithoutPoster').checked = true;
             } else if (filterContentWithoutPoster === 'false') {
-              document.getElementById('filterContentWithoutPoster').checked = false;
+                document.getElementById('filterContentWithoutPoster').checked = false;
             }
 
             if (savedProviders) {
-              selectedProviders = JSON.parse(savedProviders);
+                selectedProviders = JSON.parse(savedProviders);
 
-              if (providersData.length > 0) {
-                populateProvidersMap();
-                renderSelectedProviders();
-              } else {
-                confirmButton.addEventListener('providersLoaded', () => {
-                  populateProvidersMap();
-                  renderSelectedProviders();
-                }, { once: true });
-              }
+                if (providersData.length > 0) {
+                    populateProvidersMap();
+                    renderSelectedProviders();
+                } else {
+                    confirmButton.addEventListener('providersLoaded', () => {
+                        populateProvidersMap();
+                        renderSelectedProviders();
+                    }, { once: true });
+                }
             }
 
             if (savedRegions) {
-              selectedRegions = JSON.parse(savedRegions);
-              selectedRegions.forEach(regionCode => {
-                const country = countries.find(c => c.iso_3166_1 === regionCode);
-                if (country) {
-                  const flag = country.iso_3166_1.toUpperCase().replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
-                  addSelectedRegion(regionCode, flag, country.english_name);
-                }
-              });
+                selectedRegions = JSON.parse(savedRegions);
+                selectedRegions.forEach(regionCode => {
+                    const country = countries.find(c => c.iso_3166_1 === regionCode);
+                    if (country) {
+                        const flag = country.iso_3166_1.toUpperCase().replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
+                        addSelectedRegion(regionCode, flag, country.english_name);
+                    }
+                });
             }
 
-            if (params.addWatchedButton === 'on') {
-              const addWatchedButtonToggle = document.getElementById('addWatchedButton');
-              if (addWatchedButtonToggle) {
-                  addWatchedButtonToggle.checked = true;
-
-                  const markAsWatchedContainer = document.getElementById('markAsWatchedContainer');
-                  if (markAsWatchedContainer) {
-                      markAsWatchedContainer.style.display = 'block';
-                  }
-              }
-          }
-
-            if (params.addWatchedTraktBtn) {
-              const markAsWatchedTextbox = document.getElementById('markAsWatchedTextbox');
-              if (markAsWatchedTextbox) {
-                markAsWatchedTextbox.value = params.addWatchedTraktBtn;
-              }
+            if (popularCatalogTitle) {
+                document.getElementById('popularCatalogTitle').value = popularCatalogTitle;
             }
 
-            if (params.hideTraktHistory === 'true') {
-              const hideTraktHistoryToggle = document.getElementById('hideTraktHistory');
-              if (hideTraktHistoryToggle) {
-                  hideTraktHistoryToggle.checked = true;
+            if (newCatalogTitle) {
+                document.getElementById('newCatalogTitle').value = newCatalogTitle;
+            }
 
-                  const additionalLabelContainer = document.querySelector('.additional-label');
-                  if (additionalLabelContainer) {
-                      additionalLabelContainer.style.display = 'flex';
-                      additionalLabelContainer.style.width = '100%';
-                  }
+            if (recommendationsToggle === 'true') {
+                document.getElementById('recommendationsToggle').checked = true;
+                document.getElementById('recommendationsText').style.display = 'block';
+            } else {
+                document.getElementById('recommendationsToggle').checked = false;
+                document.getElementById('recommendationsText').style.display = 'none';
+            }
 
-                  const additionalLabel = document.querySelector('.additional-label label');
-                  if (additionalLabel) {
-                      const emoji = params.watchedEmoji || '✔️';
-                      additionalLabel.textContent = `Adds ${emoji} in front of their name`;
-                  }
-              }
-          }
+            if (recommendationsText) {
+                document.getElementById('recommendationsText').value = recommendationsText;
+            }
+
+            if (similarToggle === 'true') {
+                document.getElementById('similarToggle').checked = true;
+                document.getElementById('similarText').style.display = 'block';
+            } else {
+                document.getElementById('similarToggle').checked = false;
+                document.getElementById('similarText').style.display = 'none';
+            }
+
+            if (similarText) {
+                document.getElementById('similarText').value = similarText;
+            }
 
             localStorage.removeItem('tmdbApiKey');
             localStorage.removeItem('language');
@@ -1948,7 +2083,13 @@
             localStorage.removeItem('selectedProviders');
             localStorage.removeItem('selectedRegions');
             localStorage.removeItem('filterContentWithoutPoster');
-          }
+            localStorage.removeItem('popularCatalogTitle');
+            localStorage.removeItem('newCatalogTitle');
+            localStorage.removeItem('recommendationsToggle');
+            localStorage.removeItem('recommendationsText');
+            localStorage.removeItem('similarToggle');
+            localStorage.removeItem('similarText');
+        }
 
           const populateProvidersMap = () => {
             providersData.forEach(provider => {
@@ -1970,6 +2111,12 @@
                     localStorage.setItem('selectedProviders', JSON.stringify(selectedProviders));
                     localStorage.setItem('selectedRegions', JSON.stringify(selectedRegions));
                     localStorage.setItem('filterContentWithoutPoster', document.getElementById('filterContentWithoutPoster').checked ? 'true' : 'false');
+                    localStorage.setItem('popularCatalogTitle', document.getElementById('popularCatalogTitle').value.trim());
+                    localStorage.setItem('newCatalogTitle', document.getElementById('newCatalogTitle').value.trim());
+                    localStorage.setItem('recommendationsToggle', document.getElementById('recommendationsToggle').checked ? 'true' : 'false');
+                    localStorage.setItem('recommendationsText', document.getElementById('recommendationsText').value.trim());
+                    localStorage.setItem('similarToggle', document.getElementById('similarToggle').checked ? 'true' : 'false');
+                    localStorage.setItem('similarText', document.getElementById('similarText').value.trim());
 
                     const clientId = env.TRAKT_CLIENT_ID;
                     const redirectUri = `${window.location.origin}/callback`;
@@ -1978,6 +2125,25 @@
 
                     window.location.href = traktAuthUrl;
                 });
+                    document.getElementById('recommendationsToggle').addEventListener('change', function() {
+                        const recommendationsText = document.getElementById('recommendationsText');
+                        if (this.checked) {
+                            recommendationsText.style.display = 'block';
+                        } else {
+                            recommendationsText.style.display = 'none';
+                            recommendationsText.value = '';
+                        }
+                    });
+
+                    document.getElementById('similarToggle').addEventListener('change', function() {
+                        const similarText = document.getElementById('similarText');
+                        if (this.checked) {
+                            similarText.style.display = 'block';
+                        } else {
+                            similarText.style.display = 'none';
+                            similarText.value = '';
+                        }
+                    });
             })
             .catch(error => console.error('Error fetching environment variables:', error));
 
@@ -2012,6 +2178,26 @@
                 window.location.href = 'https://www.youtube.com/watch?v=GFq6wH5JR2A&t=43s';
               }, 10000);
             }
+
+            document.getElementById('recommendationsToggle').addEventListener('change', function() {
+              const recommendationsText = document.getElementById('recommendationsText');
+              if (this.checked) {
+                recommendationsText.style.display = 'block';
+              } else {
+                recommendationsText.style.display = 'none';
+                recommendationsText.value = '';
+              }
+            });
+
+            document.getElementById('similarToggle').addEventListener('change', function() {
+              const similarText = document.getElementById('similarText');
+              if (this.checked) {
+                similarText.style.display = 'block';
+              } else {
+                similarText.style.display = 'none';
+                similarText.value = '';
+              }
+            });
         });
         </script>
   </body>

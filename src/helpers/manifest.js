@@ -6,7 +6,7 @@ const addonLogoUrl = `${process.env.BASE_URL}/assets/logo.png`;
 
 const manifestTemplate = {
     id: 'community.streamingcatalogproviders',
-    version: '1.2.0',
+    version: '1.3.0',
     logo: addonLogoUrl,
     name: 'Streaming Catalog Providers',
     description: 'Catalog from TMDB streaming providers.',
@@ -66,7 +66,8 @@ const generateYearIntervals = (startYear = 1880, endYear = getCurrentYear(), int
 
 const generateManifest = async (config) => {
     try {
-        const { providers, language, tmdbApiKey, ageRange } = config;
+        const { providers, language, tmdbApiKey, ageRange, additionalContent, popularCatalogTitle, newCatalogTitle } = config;
+
         if (!Array.isArray(providers) || !providers.length) throw new Error('No providers specified.');
 
         if (language && !(await checkGenresExistForLanguage(language))) {
@@ -93,24 +94,44 @@ const generateManifest = async (config) => {
             ];
 
             return baseCatalogs.flatMap(base => {
-                return ['Popular', 'New'].map(catalogType => ({
-                    type: base.type,
-                    id: `tmdb-discover-${base.idSuffix}-${catalogType.toLowerCase()}-${provider.provider_id}`,
-                    name: `${catalogType} - ${provider.provider_name}`,
-                    extra: [
-                        { name: 'genre', isRequired: false, options: genreOptions(base.type === 'movie' ? movieGenres : seriesGenres) },
-                        { name: "rating", options: ["8-10", "6-8", "4-6", "2-4", "0-2"], isRequired: false },
-                        { name: "year", options: yearIntervals, isRequired: false },
-                        { name: 'skip', isRequired: false },
-                        { name: 'ageRange', value: isKidsMode ? ageRange : '18+' }
-                    ]
-                }));
+                return [
+                    {
+                        type: base.type,
+                        id: `tmdb-discover-${base.idSuffix}-popular-${provider.provider_id}`,
+                        name: `${popularCatalogTitle || 'Popular'} - ${provider.provider_name}`,
+                        extra: [
+                            { name: 'genre', isRequired: false, options: genreOptions(base.type === 'movie' ? movieGenres : seriesGenres) },
+                            { name: "rating", options: ["8-10", "6-8", "4-6", "2-4", "0-2"], isRequired: false },
+                            { name: "year", options: yearIntervals, isRequired: false },
+                            { name: 'skip', isRequired: false },
+                            { name: 'ageRange', value: isKidsMode ? ageRange : '18+' }
+                        ]
+                    },
+                    {
+                        type: base.type,
+                        id: `tmdb-discover-${base.idSuffix}-new-${provider.provider_id}`,
+                        name: `${newCatalogTitle || 'New'} - ${provider.provider_name}`,
+                        extra: [
+                            { name: 'genre', isRequired: false, options: genreOptions(base.type === 'movie' ? movieGenres : seriesGenres) },
+                            { name: "rating", options: ["8-10", "6-8", "4-6", "2-4", "0-2"], isRequired: false },
+                            { name: "year", options: yearIntervals, isRequired: false },
+                            { name: 'skip', isRequired: false },
+                            { name: 'ageRange', value: isKidsMode ? ageRange : '18+' }
+                        ]
+                    }
+                ];
             });
         });
 
+        const resources = ['catalog'];
+        if (additionalContent && additionalContent.trim() !== '') {
+            resources.push('stream');
+        }
+
         const manifest = {
             ...manifestTemplate,
-            catalogs: catalogs
+            catalogs: catalogs,
+            resources: resources
         };
 
         return manifest;
@@ -119,5 +140,6 @@ const generateManifest = async (config) => {
         throw error;
     }
 };
+
 
 module.exports = generateManifest;

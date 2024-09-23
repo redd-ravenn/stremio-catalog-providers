@@ -14,6 +14,8 @@
 
 - **Customizable catalog display**: Arrange catalog displays in the preferred order through the addon's configuration page.
 
+- **Content recommendations and similar titles**: View recommended and similar content directly on the content's page.
+
 - **Trakt Integration**:
   - **Sync Trakt history**: Synchronize your Trakt watch history with Stremio, ensuring your watched items are marked in your catalogs with a custom emoji of your choice.
   - **Automatic synchronization**: Trakt history sync occurs automatically everyday, interval can be customized through an environment variable.
