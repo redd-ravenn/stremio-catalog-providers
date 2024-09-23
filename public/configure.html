@@ -749,6 +749,31 @@
     body.dark-mode .picmo__skin-tone-selector:hover {
         background-color: #666;
     }
+
+    .provider {
+        position: relative;
+        display: inline-block;
+      }
+
+      .provider img {
+        width: 100px;
+        height: auto;
+        display: block;
+      }
+
+      .region-flag {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        font-size: 20px;
+        width: 24px;
+        height: 24px;
+        background-color: #ffffff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.5);
+      }
     </style>
   </head>
 <html>
@@ -759,7 +784,7 @@
         <img src="/assets/logo.png" alt="Addon Logo" />
       </div>
       <h1 class="name">Streaming Catalog Providers</h1>
-      <h2 class="version">1.1.2</h2>
+      <h2 class="version">1.2.0</h2>
       <h2 class="description">Catalog from TMDB streaming providers</h2>
       <div id="popup" class="popup"></div>
     
@@ -1087,24 +1112,38 @@
             selectedProvidersContainer.innerHTML = selectedProviders.map(providerId => {
               const provider = providersMap[providerId];
               if (!provider) return '';
+
+              const regionCode = Object.keys(JSON.parse(provider.display_priorities)).find(region => selectedRegions.includes(region));
+
               return `
                 <div class="selected-provider" data-id="${providerId}">
                   <img src="https://image.tmdb.org/t/p/w500/${provider.logo_path}" alt="${provider.provider_name}" title="${provider.provider_name}" />
                   <button class="remove-button" data-id="${providerId}">&times;</button>
                 </div>`;
             }).join('');
-        
+
             document.querySelectorAll('.remove-button').forEach(button => {
               button.addEventListener('click', (event) => {
                 const providerId = event.target.getAttribute('data-id');
                 selectedProviders = selectedProviders.filter(id => id !== providerId);
+                
                 const providerElement = document.querySelector(`.provider[data-id="${providerId}"]`);
                 if (providerElement) providerElement.style.display = 'block';
+                
+                const regionCode = providerElement.getAttribute('data-region');
+                if (!selectedProviders.some(id => {
+                  const provider = providersMap[id];
+                  const displayPriorities = JSON.parse(provider.display_priorities);
+                  return Object.keys(displayPriorities).includes(regionCode);
+                })) {
+                  selectedRegions = selectedRegions.filter(region => region !== regionCode);
+                }
+
                 renderSelectedProviders();
               });
             });
           };
-        
+
           const fetchProviders = async (apiKey) => {
             try {
               const response = await fetch('/fetch-providers', {
@@ -1669,27 +1708,70 @@
             });
           }
         
+          const getFlagForRegion = (isoCode) => {
+            const flag = isoCode
+              .toUpperCase()
+              .replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
+            console.log("Flag for region:", isoCode, "is", flag);
+            return flag;
+          };
+
+          const getCountryInfo = (regionCode) => {
+            const country = countries.find(c => c.iso_3166_1 === regionCode);
+            if (country) {
+              const flag = country.iso_3166_1
+                .toUpperCase()
+                .replace(/./g, char => String.fromCodePoint(127397 + char.charCodeAt()));
+              return { english_name: country.english_name, flag: flag };
+            }
+            return { english_name: regionCode, flag: regionCode };
+          };
+
           document.getElementById('searchProviders').addEventListener('input', function(event) {
             const searchTerm = event.target.value.toLowerCase();
+            console.log("Search term:", searchTerm);
 
-            if (searchTerm === 'snake') {
-              if (!snakeGameActive) {
-                snakeGame();
-              } else {
-                alert('The game is already running!');
+            document.getElementById('providers').innerHTML = '';
+
+            Object.keys(providersMap).forEach(providerId => {
+              const provider = providersMap[providerId];
+              const providerName = provider.provider_name.toLowerCase();
+
+              if (providerName.includes(searchTerm)) {
+                const displayPriorities = JSON.parse(provider.display_priorities);
+                console.log("Display priorities for provider:", provider.provider_name, displayPriorities);
+
+                Object.keys(displayPriorities).forEach(regionCode => {
+                  const { english_name, flag } = getCountryInfo(regionCode);
+
+                  const providerElement = document.createElement('div');
+                  providerElement.className = 'provider';
+                  providerElement.setAttribute('data-id', providerId);
+                  providerElement.setAttribute('data-region', regionCode);
+                  
+                  providerElement.innerHTML = `
+                    <img src="https://image.tmdb.org/t/p/w500/${provider.logo_path}" alt="${provider.provider_name}" title="${provider.provider_name}" />
+                    <span class="region-flag">${flag}</span>
+                  `;
+                  
+                  console.log("Generated HTML for provider:", providerElement.innerHTML);
+
+                  providerElement.addEventListener('click', function() {
+                    if (!selectedProviders.includes(providerId)) {
+                      selectedProviders.push(providerId);
+                      addSelectedRegion(regionCode, flag, english_name);
+                    }
+
+                    renderSelectedProviders();
+                  });
+
+                  document.getElementById('providers').appendChild(providerElement);
+                });
               }
-            }
-
-            document.querySelectorAll('#providers .provider').forEach(providerElement => {
-              const providerId = providerElement.getAttribute('data-id');
-              const providerName = providersMap[providerId].provider_name.toLowerCase();
-              providerElement.style.display = providerName.includes(searchTerm) && !selectedProviders.includes(providerId) ? 'flex' : 'none';
             });
+
             if (searchTerm === '') {
-              document.querySelectorAll('#providers .provider').forEach(providerElement => {
-                const providerId = providerElement.getAttribute('data-id');
-                providerElement.style.display = selectedProviders.includes(providerId) ? 'none' : 'flex';
-              });
+              renderProviders();
             }
           });
 

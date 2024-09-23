@@ -6,7 +6,7 @@ const addonLogoUrl = `${process.env.BASE_URL}/assets/logo.png`;
 
 const manifestTemplate = {
     id: 'community.streamingcatalogproviders',
-    version: '1.1.2',
+    version: '1.2.0',
     logo: addonLogoUrl,
     name: 'Streaming Catalog Providers',
     description: 'Catalog from TMDB streaming providers.',

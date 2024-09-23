@@ -62,7 +62,7 @@ router.get("/:configParameters?/catalog/:type/:id/:extra?.json", async (req, res
         }
 
         if (parsedConfig.hideTraktHistory === 'true' && parsedConfig.traktUsername) {
-            filteredResults = await handleTraktHistory(parsedConfig, filteredResults);
+            filteredResults = await handleTraktHistory(parsedConfig, filteredResults, catalogType);
         }
 
         const metas = await buildMetas(filteredResults, catalogType, parsedConfig.language, parsedConfig.rpdbApiKey, parsedConfig.fanartApiKey, parsedConfig.addWatchedTraktBtn, parsedConfig.hideTraktHistory, parsedConfig.traktUsername, origin);

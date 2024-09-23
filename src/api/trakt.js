@@ -142,10 +142,12 @@ const fetchUserHistory = async (username, type, accessToken) => {
     }
 };
 
-async function handleTraktHistory(parsedConfig, filteredResults) {
+async function handleTraktHistory(parsedConfig, filteredResults, type) {
     const traktUsername = parsedConfig.traktUsername;
     const watchedEmoji = parsedConfig.watchedEmoji || '✔️';
     const fetchInterval = process.env.TRAKT_HISTORY_FETCH_INTERVAL || '24h';
+
+    const dbType = type === 'movies' ? 'movie' : type === 'series' ? 'show' : type;
 
     const intervalInMs = (() => {
         const intervalValue = parseInt(fetchInterval.slice(0, -1), 10);
@@ -226,9 +228,11 @@ async function handleTraktHistory(parsedConfig, filteredResults) {
     }
 
     const traktIdsResult = await pool.query(
-        `SELECT tmdb_id FROM trakt_history WHERE username = $1 AND tmdb_id IS NOT NULL`,
-        [traktUsername]
+        `SELECT tmdb_id FROM trakt_history WHERE username = $1 AND type = $2 AND tmdb_id IS NOT NULL`,
+        [traktUsername, dbType]
     );
+
+    log.debug(`Fetching Trakt history for user ${traktUsername} with type ${dbType}. Result: ${traktIdsResult.rows.length} items found.`);
 
     const traktIds = traktIdsResult.rows.map(row => `tmdb:${row.tmdb_id}`);
 
