@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   stremio-catalog-providers:
+    container_name: stremio_catalog_providers
     image: reddravenn/stremio-catalog-providers
     ports:
       - "8080:7000"
@@ -9,14 +10,14 @@ services:
       PORT: 7000
       BASE_URL: http://localhost:7000
       DB_USER: postgres_user
-      DB_HOST: postgres
+      DB_HOST: stremio_postgres
       DB_NAME: stremio_catalog_db
       DB_PASSWORD: postgres_password
       DB_PORT: 5432
       DB_MAX_CONNECTIONS: 20
       DB_IDLE_TIMEOUT: 30000
       DB_CONNECTION_TIMEOUT: 2000
-      REDIS_HOST: redis
+      REDIS_HOST: stremio_redis
       REDIS_PORT: 6379
       REDIS_PASSWORD:
       TRAKT_CLIENT_ID: your_trakt_client_id
@@ -28,13 +29,16 @@ services:
       LOG_INTERVAL_DELETION: 3d
       NODE_ENV: production
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./db:/usr/src/app/db
       - ./log:/usr/src/app/log
 
   postgres:
+    container_name: stremio_postgres
     image: postgres:16.4
     environment:
       POSTGRES_DB: stremio_catalog_db
@@ -44,10 +48,22 @@ services:
       - ./postgres/data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres_user"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
 
   redis:
+    container_name: stremio_redis
     image: redis:6
     ports:
       - "6379:6379"
     volumes:
       - ./redis/data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
