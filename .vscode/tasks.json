@@ -28,6 +28,19 @@
 				"package": "${workspaceFolder}/node_modules/send/package.json",
 				"enableDebugging": true
 			}
+		},
+		{
+			"type": "docker-build",
+			"label": "docker-build",
+			"platform": "node",
+			"dockerBuild": {
+				"dockerfile": "${workspaceFolder}/node_modules/send/Dockerfile",
+				"context": "${workspaceFolder}/node_modules/send",
+				"pull": true
+			},
+			"node": {
+				"package": "${workspaceFolder}/node_modules/send/package.json"
+			}
 		}
 	]
 }
